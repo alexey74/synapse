@@ -359,7 +359,7 @@ def check_state_dependent_auth_rules(
     # a user is allowed to issue invites.  Fixes
     # https://github.com/vector-im/vector-web/issues/1208 hopefully
     if event.type == EventTypes.ThirdPartyInvite:
-        user_level = get_user_power_level(event.user_id, auth_dict)
+        user_level = get_user_power_level(event.sender, auth_dict)
         invite_level = get_named_level(auth_dict, "invite", 0)
 
         if user_level < invite_level:
@@ -429,8 +429,8 @@ def _check_size_limits(event: "EventBase") -> None:
 
     # Codepoint size check: Synapse always enforced these limits, so apply
     # them strictly.
-    if len(event.user_id) > 255:
-        raise EventSizeError("'user_id' too large", unpersistable=True)
+    if len(event.sender) > 255:
+        raise EventSizeError("'sender' too large", unpersistable=True)
     if len(event.room_id) > 255:
         raise EventSizeError("'room_id' too large", unpersistable=True)
     if event.is_state() and len(event.state_key) > 255:
@@ -445,8 +445,8 @@ def _check_size_limits(event: "EventBase") -> None:
     )
 
     # Byte size check: if these fail, then be lenient to avoid breaking rooms.
-    if len(event.user_id.encode("utf-8")) > 255:
-        raise EventSizeError("'user_id' too large", unpersistable=strict_byte_limits)
+    if len(event.sender.encode("utf-8")) > 255:
+        raise EventSizeError("'sender' too large", unpersistable=strict_byte_limits)
     if len(event.room_id.encode("utf-8")) > 255:
         raise EventSizeError("'room_id' too large", unpersistable=strict_byte_limits)
     if event.is_state() and len(event.state_key.encode("utf-8")) > 255:
@@ -566,7 +566,7 @@ def _is_membership_change_allowed(
             raise AuthError(403, "This room has been marked as unfederatable.")
 
     # get info about the caller
-    key = (EventTypes.Member, event.user_id)
+    key = (EventTypes.Member, event.sender)
     caller = auth_events.get(key)
 
     caller_in_room = caller and caller.membership == Membership.JOIN
@@ -591,7 +591,7 @@ def _is_membership_change_allowed(
     else:
         join_rule = JoinRules.INVITE
 
-    user_level = get_user_power_level(event.user_id, auth_events)
+    user_level = get_user_power_level(event.sender, auth_events)
     target_level = get_user_power_level(target_user_id, auth_events)
 
     invite_level = get_named_level(auth_events, "invite", 0)
@@ -609,7 +609,7 @@ def _is_membership_change_allowed(
             "membership": membership,
             "join_rule": join_rule,
             "target_user_id": target_user_id,
-            "event.user_id": event.user_id,
+            "event.sender": event.sender,
         },
     )
 
@@ -629,14 +629,14 @@ def _is_membership_change_allowed(
         if (
             (caller_invited or caller_knocked)
             and Membership.LEAVE == membership
-            and target_user_id == event.user_id
+            and target_user_id == event.sender
         ):
             return
 
         if not caller_in_room:  # caller isn't joined
             raise UnstableSpecAuthError(
                 403,
-                "%s not in room %s." % (event.user_id, event.room_id),
+                "%s not in room %s." % (event.sender, event.room_id),
                 errcode=Codes.NOT_JOINED,
             )
 
@@ -667,7 +667,7 @@ def _is_membership_change_allowed(
         # * They are already joined (it's a NOOP).
         # * The room is public.
         # * The room is restricted and the user meets the allows rules.
-        if event.user_id != target_user_id:
+        if event.sender != target_user_id:
             raise AuthError(403, "Cannot force another user to join.")
         elif target_banned:
             raise AuthError(403, "You are banned from this room")
@@ -727,7 +727,7 @@ def _is_membership_change_allowed(
                 "You cannot unban user %s." % (target_user_id,),
                 errcode=Codes.INSUFFICIENT_POWER,
             )
-        elif target_user_id != event.user_id:
+        elif target_user_id != event.sender:
             kick_level = get_named_level(auth_events, "kick", 50)
 
             if user_level < kick_level or user_level <= target_level:
@@ -755,7 +755,7 @@ def _is_membership_change_allowed(
             or join_rule != JoinRules.KNOCK_RESTRICTED
         ):
             raise AuthError(403, "You don't have permission to knock")
-        elif target_user_id != event.user_id:
+        elif target_user_id != event.sender:
             raise AuthError(403, "You cannot knock for other users")
         elif target_in_room:
             raise UnstableSpecAuthError(
@@ -774,10 +774,10 @@ def _is_membership_change_allowed(
 def _check_event_sender_in_room(
     event: "EventBase", auth_events: StateMap["EventBase"]
 ) -> None:
-    key = (EventTypes.Member, event.user_id)
+    key = (EventTypes.Member, event.sender)
     member_event = auth_events.get(key)
 
-    _check_joined_room(member_event, event.user_id, event.room_id)
+    _check_joined_room(member_event, event.sender, event.room_id)
 
 
 def _check_joined_room(
@@ -831,7 +831,7 @@ def _can_send_event(event: "EventBase", auth_events: StateMap["EventBase"]) -> b
     power_levels_event = get_power_level_event(auth_events)
 
     send_level = get_send_level(event.type, state_key, power_levels_event)
-    user_level = get_user_power_level(event.user_id, auth_events)
+    user_level = get_user_power_level(event.sender, auth_events)
 
     if user_level < send_level:
         raise UnstableSpecAuthError(
@@ -844,7 +844,7 @@ def _can_send_event(event: "EventBase", auth_events: StateMap["EventBase"]) -> b
     if (
         state_key is not None
         and state_key.startswith("@")
-        and state_key != event.user_id
+        and state_key != event.sender
     ):
         if event.room_version.msc3757_enabled:
             try:
@@ -863,7 +863,7 @@ def _can_send_event(event: "EventBase", auth_events: StateMap["EventBase"]) -> b
                 )
             if (
                 # sender is owner of the state key
-                state_key_user_id == event.user_id
+                state_key_user_id == event.sender
                 # sender has higher PL than the owner of the state key
                 or user_level > get_user_power_level(state_key_user_id, auth_events)
             ):
@@ -890,7 +890,7 @@ def check_redaction(
         AuthError if the event sender is definitely not allowed to redact
         the target event.
     """
-    user_level = get_user_power_level(event.user_id, auth_events)
+    user_level = get_user_power_level(event.sender, auth_events)
 
     redact_level = get_named_level(auth_events, "redact", 50)
 
@@ -988,7 +988,7 @@ def _check_power_levels(
     if not current_state:
         return
 
-    user_level = get_user_power_level(event.user_id, auth_events)
+    user_level = get_user_power_level(event.sender, auth_events)
 
     # Check other levels:
     levels_to_check: list[tuple[str, str | None]] = [
@@ -1042,7 +1042,7 @@ def _check_power_levels(
             if new_level == old_level:
                 continue
 
-        if dir == "users" and level_to_check != event.user_id:
+        if dir == "users" and level_to_check != event.sender:
             if old_level == user_level:
                 raise AuthError(
                     403,
@@ -1159,7 +1159,7 @@ def _verify_third_party_invite(
     if invite_event.sender != event.sender:
         return False
 
-    if event.user_id != invite_event.user_id:
+    if event.sender != invite_event.sender:
         return False
 
     if signed["mxid"] != event.state_key:
