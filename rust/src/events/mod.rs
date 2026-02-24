@@ -20,10 +20,15 @@
 
 //! Classes for representing Events.
 
+use std::{collections::HashMap, sync::Arc};
+
 use pyo3::{
+    exceptions::PyKeyError,
+    pyclass, pymethods,
     types::{PyAnyMethods, PyModule, PyModuleMethods},
-    wrap_pyfunction, Bound, PyResult, Python,
+    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyResult, Python,
 };
+use pythonize::{depythonize, pythonize};
 
 pub mod filter;
 mod internal_metadata;
@@ -32,6 +37,7 @@ mod internal_metadata;
 pub fn register_module(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let child_module = PyModule::new(py, "events")?;
     child_module.add_class::<internal_metadata::EventInternalMetadata>()?;
+    child_module.add_class::<JsonObject>()?;
     child_module.add_function(wrap_pyfunction!(filter::event_visible_to_server_py, m)?)?;
 
     m.add_submodule(&child_module)?;
@@ -43,4 +49,55 @@ pub fn register_module(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
         .set_item("synapse.synapse_rust.events", child_module)?;
 
     Ok(())
+}
+
+struct Hashes {
+    sha256: Option<[u8; 32]>,
+    others: std::collections::HashMap<Box<str>, Box<str>>,
+}
+
+#[pyclass]
+struct EventInner {
+    #[pyo3(get)]
+    content: JsonObject,
+    depth: i64,
+    hashes: Hashes,
+    origin_server_ts: i64,
+    sender: Box<str>,
+    state_key: Option<Box<str>>,
+    type_: Box<str>,
+
+    unsigned: JsonObject,
+    signatures: HashMap<Box<str>, HashMap<Box<str>, Box<str>>>,
+}
+
+#[pyclass(mapping)]
+#[derive(Clone)]
+struct JsonObject {
+    object: Arc<HashMap<Box<str>, serde_json::Value>>,
+}
+
+#[pymethods]
+impl JsonObject {
+    #[new]
+    fn new<'a, 'py>(object: &'a Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self {
+            object: Arc::new(depythonize(&object)?),
+        })
+    }
+
+    fn __len__(&self) -> usize {
+        self.object.len()
+    }
+
+    fn __contains__(&self, key: &str) -> bool {
+        self.object.contains_key(key)
+    }
+
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let Some(value) = self.object.get(key) else {
+            return Err(PyKeyError::new_err(key.to_string()));
+        };
+        Ok(Some(pythonize(py, value)?))
+    }
 }
