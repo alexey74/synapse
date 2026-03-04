@@ -56,6 +56,7 @@ http-body-util = "0.1.3"
 futures = "0.3.31"
 tokio = { version = "1.44.2", features = ["rt", "rt-multi-thread"] }
 once_cell = "1.18.0"
+signed-json = { git = "https://github.com/erikjohnston/rust-signed-json" }
 
 [features]
 extension-module = ["pyo3/extension-module"]
