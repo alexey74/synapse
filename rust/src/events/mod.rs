@@ -22,11 +22,11 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use pyo3::{
-    exceptions::{PyKeyError, PyTypeError},
+    exceptions::PyKeyError,
     pyclass, pymethods,
     types::{PyAnyMethods, PyIterator, PyMapping, PyMappingMethods, PyModule, PyModuleMethods},
     wrap_pyfunction, Bound, IntoPyObject, PyAny, PyResult, Python,
@@ -71,7 +71,7 @@ impl JsonObject {
     #[new]
     fn new<'a, 'py>(object: &'a Bound<'py, PyAny>) -> PyResult<Self> {
         Ok(Self {
-            object: Arc::new(depythonize(&object)?),
+            object: Arc::new(depythonize(object)?),
         })
     }
 
@@ -175,26 +175,26 @@ impl Signatures {
 
     fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
-        Ok(signatures
+        signatures
             .keys()
             .map(|k| &**k)
             .collect::<Vec<_>>()
-            .into_pyobject(py)?)
+            .into_pyobject(py)
     }
 
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
-        Ok(signatures
+        signatures
             .values()
             .cloned()
             .collect::<Vec<_>>()
-            .into_pyobject(py)?)
+            .into_pyobject(py)
     }
 
     fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
         let items: Vec<_> = signatures.iter().map(|(k, v)| (&**k, v.clone())).collect();
-        Ok(items.into_pyobject(py)?)
+        items.into_pyobject(py)
     }
 
     #[pyo3(signature = (key, default=None))]
@@ -257,11 +257,11 @@ impl DomainSignatures {
         // iterator type.
         let signatures = self.signatures.read().unwrap();
 
-        Ok(signatures
+        signatures
             .keys()
             .map(|k| &**k)
             .collect::<Vec<_>>()
-            .into_pyobject(py)?)
+            .into_pyobject(py)
     }
 
     fn __contains__(&self, key: &str) -> bool {
@@ -284,26 +284,26 @@ impl DomainSignatures {
 
     fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
-        Ok(signatures
+        signatures
             .keys()
             .map(|k| &**k)
             .collect::<Vec<_>>()
-            .into_pyobject(py)?)
+            .into_pyobject(py)
     }
 
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
-        Ok(signatures
+        signatures
             .values()
             .map(|v| &**v)
             .collect::<Vec<_>>()
-            .into_pyobject(py)?)
+            .into_pyobject(py)
     }
 
     fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let signatures = self.signatures.read().unwrap();
         let items: Vec<_> = signatures.iter().map(|(k, v)| (&**k, &**v)).collect();
-        Ok(items.into_pyobject(py)?)
+        items.into_pyobject(py)
     }
 
     #[pyo3(signature = (key, default=None))]
@@ -402,7 +402,7 @@ impl Event {
     }
 
     #[getter]
-    fn signatures<'py>(&self, py: Python<'py>) -> PyResult<Signatures> {
+    fn signatures(&self) -> PyResult<Signatures> {
         match &self.inner {
             EventFormatEnum::V3(format) => Ok(format.common_fields.signatures.clone()),
             // ...
