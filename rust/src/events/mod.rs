@@ -26,13 +26,18 @@ use std::{
 };
 
 use pyo3::{
-    exceptions::PyKeyError,
+    exceptions::{PyException, PyKeyError},
     pyclass, pymethods,
     types::{PyAnyMethods, PyIterator, PyMapping, PyMappingMethods, PyModule, PyModuleMethods},
-    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyResult, Python,
+    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyErr, PyResult, Python,
 };
 use pythonize::{depythonize, pythonize};
 use serde::{Deserialize, Serialize};
+
+use crate::{
+    events::{constants::RoomVersion, utils::calculate_event_id},
+    identifier::EventID,
+};
 
 mod constants;
 pub mod filter;
@@ -376,6 +381,7 @@ struct EventCommonFields {
 #[pyclass]
 struct Event {
     inner: EventFormatEnum,
+    event_id: EventID,
 }
 
 #[pymethods]
@@ -390,8 +396,16 @@ impl Event {
         }
 
         let event_format_v3: EventFormatV3Container = depythonize(event_dict)?;
+
+        let event_value = serde_json::to_value(&event_format_v3)
+            .map_err(|err| PyException::new_err(format!("Failed to serialize event: {}", err)))?;
+        let event_id = calculate_event_id(&event_value, &RoomVersion::V10).map_err(|err| {
+            PyException::new_err(format!("Failed to calculate event_id: {}", err))
+        })?;
+
         Ok(Self {
             inner: EventFormatEnum::V3(event_format_v3),
+            event_id,
         })
     }
 
@@ -408,6 +422,11 @@ impl Event {
             EventFormatEnum::V3(format) => Ok(pythonize(py, format)?),
             // ...
         }
+    }
+
+    #[getter]
+    fn event_id(&self) -> &str {
+        &self.event_id
     }
 
     #[getter]
