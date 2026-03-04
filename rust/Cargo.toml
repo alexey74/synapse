@@ -43,7 +43,7 @@ pyo3-log = "0.13.1"
 pythonize = "0.27.0"
 regex = "1.6.0"
 sha2 = "0.10.8"
-serde = { version = "1.0.144", features = ["derive"] }
+serde = { version = "1.0.144", features = ["derive", "rc"] }
 serde_json = "1.0.85"
 ulid = "1.1.2"
 icu_segmenter = "2.0.0"
