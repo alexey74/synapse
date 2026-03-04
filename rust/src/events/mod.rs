@@ -356,19 +356,19 @@ struct EventCommonFields {
     content: JsonObject,
     hashes: HashMap<String, String>,
     origin_server_ts: i64,
-    sender: String,
+    sender: Box<str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    state_key: Option<String>,
+    state_key: Option<Box<str>>,
     #[serde(rename = "type")]
-    type_: String,
+    type_: Box<str>,
 
-    room_id: Option<String>,
+    room_id: Option<Box<str>>,
 
     unsigned: JsonObject,
     signatures: Signatures,
 
     #[serde(flatten)]
-    other_fields: HashMap<String, serde_json::Value>,
+    other_fields: HashMap<Box<str>, serde_json::Value>,
 }
 
 #[pyclass]
@@ -415,6 +415,67 @@ impl Event {
             // ...
         }
     }
+
+    #[getter]
+    fn content(&self) -> PyResult<JsonObject> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format.common_fields.content.clone()),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn hashes(&self) -> PyResult<&HashMap<String, String>> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(&format.common_fields.hashes),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn origin_server_ts(&self) -> PyResult<i64> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format.common_fields.origin_server_ts),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn sender(&self) -> PyResult<&str> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(&format.common_fields.sender),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn state_key(&self) -> PyResult<&str> {
+        let state_key = match &self.inner {
+            EventFormatEnum::V3(format) => &format.common_fields.state_key,
+            // ...
+        };
+
+        let Some(state_key) = state_key.as_deref() else {
+            return Err(PyKeyError::new_err("state_key"));
+        };
+        Ok(state_key)
+    }
+
+    #[getter]
+    fn r#type(&self) -> PyResult<&str> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(&format.common_fields.type_),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn unsigned(&self) -> PyResult<JsonObject> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format.common_fields.unsigned.clone()),
+            // ...
+        }
+    }
 }
 
 enum EventFormatEnum {
@@ -448,11 +509,11 @@ mod tests {
         let event: EventFormatV3Container = serde_json::from_str(json).unwrap();
         let parsed_value = serde_json::to_value(&event).unwrap();
 
-        assert_eq!(event.common_fields.type_, "m.room.create".to_string());
+        assert_eq!(&*event.common_fields.type_, "m.room.create");
 
         assert_eq!(
-            event.common_fields.room_id,
-            Some("!qVoJSympOqdUQRUfiC:localhost:8800".to_string())
+            event.common_fields.room_id.as_deref(),
+            Some("!qVoJSympOqdUQRUfiC:localhost:8800")
         );
 
         assert_eq!(event_value, parsed_value);
