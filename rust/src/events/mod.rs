@@ -393,6 +393,21 @@ impl Event {
         })
     }
 
+    fn get_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(pythonize(py, format)?),
+            // ...
+        }
+    }
+
+    fn get_pdu_json<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // We need to do a bunch of changes here.
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(pythonize(py, format)?),
+            // ...
+        }
+    }
+
     #[getter]
     fn room_id(&self) -> Option<&str> {
         match &self.inner {
@@ -405,13 +420,6 @@ impl Event {
     fn signatures(&self) -> PyResult<Signatures> {
         match &self.inner {
             EventFormatEnum::V3(format) => Ok(format.common_fields.signatures.clone()),
-            // ...
-        }
-    }
-
-    fn get_pdu_json<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match &self.inner {
-            EventFormatEnum::V3(format) => Ok(pythonize(py, format)?),
             // ...
         }
     }
