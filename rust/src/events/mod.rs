@@ -22,20 +22,26 @@
 
 use std::{
     collections::HashMap,
+    str::FromStr,
     sync::{Arc, RwLock},
 };
 
 use pyo3::{
-    exceptions::{PyException, PyKeyError},
+    exceptions::{PyException, PyKeyError, PyValueError},
     pyclass, pymethods,
-    types::{PyAnyMethods, PyIterator, PyMapping, PyMappingMethods, PyModule, PyModuleMethods},
-    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyErr, PyResult, Python,
+    types::{
+        PyAnyMethods, PyDict, PyIterator, PyMapping, PyMappingMethods, PyModule, PyModuleMethods,
+    },
+    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyResult, Python,
 };
 use pythonize::{depythonize, pythonize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    events::{constants::RoomVersion, utils::calculate_event_id},
+    events::{
+        constants::{get_room_version_py, RoomVersion},
+        utils::calculate_event_id,
+    },
     identifier::EventID,
 };
 
@@ -382,30 +388,62 @@ struct EventCommonFields {
 struct Event {
     inner: EventFormatEnum,
     event_id: EventID,
+    internal_metadata: internal_metadata::EventInternalMetadata,
+    room_version: RoomVersion,
+    rejected_reason: Option<Box<str>>,
 }
 
 #[pymethods]
 impl Event {
     #[new]
-    fn new<'a, 'py>(format: u8, event_dict: &'a Bound<'py, PyAny>) -> PyResult<Self> {
-        if format != 3 {
-            return Err(PyKeyError::new_err(format!(
-                "Unsupported event format version: {}",
-                format
-            )));
+    fn new<'a, 'py>(
+        event_dict: &'a Bound<'py, PyAny>,
+        room_version: &'a Bound<'py, PyAny>,
+        internal_metadata_dict: &'a Bound<'py, PyDict>,
+        rejected_reason: Option<String>,
+    ) -> PyResult<Self> {
+        let room_version = {
+            let r = room_version.getattr("identifier")?;
+            let room_version_str = r.extract::<&str>()?;
+            RoomVersion::from_str(room_version_str)
+                .map_err(|e| PyValueError::new_err(format!("Unsupported room version: {}", e)))?
+        };
+
+        let rejected_reason = rejected_reason.map(String::into_boxed_str);
+
+        // Check we're the right room version
+        match room_version {
+            RoomVersion::V4
+            | RoomVersion::V5
+            | RoomVersion::V6
+            | RoomVersion::V7
+            | RoomVersion::V8
+            | RoomVersion::V9
+            | RoomVersion::V10
+            | RoomVersion::V11
+            | RoomVersion::OrgMatrixMsc1767_10
+            | RoomVersion::OrgMatrixMsc3757_10
+            | RoomVersion::OrgMatrixMsc3757_11 => {}
+            _ => return Err(PyValueError::new_err("Unsupported room version")),
         }
 
         let event_format_v3: EventFormatV3Container = depythonize(event_dict)?;
 
+        let internal_metadata =
+            internal_metadata::EventInternalMetadata::new(internal_metadata_dict)?;
+
         let event_value = serde_json::to_value(&event_format_v3)
             .map_err(|err| PyException::new_err(format!("Failed to serialize event: {}", err)))?;
-        let event_id = calculate_event_id(&event_value, &RoomVersion::V10).map_err(|err| {
+        let event_id = calculate_event_id(&event_value, &room_version).map_err(|err| {
             PyException::new_err(format!("Failed to calculate event_id: {}", err))
         })?;
 
         Ok(Self {
             inner: EventFormatEnum::V3(event_format_v3),
             event_id,
+            room_version,
+            rejected_reason,
+            internal_metadata,
         })
     }
 
@@ -504,6 +542,22 @@ impl Event {
             EventFormatEnum::V3(format) => Ok(format.common_fields.unsigned.clone()),
             // ...
         }
+    }
+
+    #[getter]
+    fn internal_metadata(&self) -> PyResult<internal_metadata::EventInternalMetadata> {
+        // TODO: Interior mutability
+        Ok(self.internal_metadata.clone())
+    }
+
+    #[getter]
+    fn rejected_reason(&self) -> Option<&str> {
+        self.rejected_reason.as_deref()
+    }
+
+    #[getter]
+    fn room_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        get_room_version_py(&self.room_version, py)
     }
 }
 

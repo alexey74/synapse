@@ -5,6 +5,12 @@
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::Error;
+use once_cell::sync::OnceCell;
+use pyo3::{
+    types::PyAnyMethods, Borrowed, Bound, FromPyObject, Py, PyAny, PyErr, PyResult, Python,
+};
+
+use crate::events::Event;
 
 /// Maximum size of a PDU
 pub const MAX_PDU_SIZE_BYTES: usize = 65_535;
@@ -48,27 +54,33 @@ pub enum RoomVersion {
     Custom(String),
 }
 
+impl RoomVersion {
+    pub fn as_str(&self) -> &str {
+        match self {
+            RoomVersion::V1 => "1",
+            RoomVersion::V2 => "2",
+            RoomVersion::V3 => "3",
+            RoomVersion::V4 => "4",
+            RoomVersion::V5 => "5",
+            RoomVersion::V6 => "6",
+            RoomVersion::V7 => "7",
+            RoomVersion::V8 => "8",
+            RoomVersion::V9 => "9",
+            RoomVersion::V10 => "10",
+            RoomVersion::V11 => "11",
+            RoomVersion::V12 => "12",
+            RoomVersion::OrgMatrixMsc1767_10 => "org.matrix.msc1767.10",
+            RoomVersion::OrgMatrixMsc3757_10 => "org.matrix.msc3757.10",
+            RoomVersion::OrgMatrixMsc3757_11 => "org.matrix.msc3757.11",
+            RoomVersion::OrgMatrixHydra11 => "org.matrix.hydra.11",
+            RoomVersion::Custom(s) => s.as_str(),
+        }
+    }
+}
+
 impl Display for RoomVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RoomVersion::V1 => write!(f, "1"),
-            RoomVersion::V2 => write!(f, "2"),
-            RoomVersion::V3 => write!(f, "3"),
-            RoomVersion::V4 => write!(f, "4"),
-            RoomVersion::V5 => write!(f, "5"),
-            RoomVersion::V6 => write!(f, "6"),
-            RoomVersion::V7 => write!(f, "7"),
-            RoomVersion::V8 => write!(f, "8"),
-            RoomVersion::V9 => write!(f, "9"),
-            RoomVersion::V10 => write!(f, "10"),
-            RoomVersion::V11 => write!(f, "11"),
-            RoomVersion::V12 => write!(f, "12"),
-            RoomVersion::OrgMatrixMsc1767_10 => write!(f, "org.matrix.msc1767.10"),
-            RoomVersion::OrgMatrixMsc3757_10 => write!(f, "org.matrix.msc3757.10"),
-            RoomVersion::OrgMatrixMsc3757_11 => write!(f, "org.matrix.msc3757.11"),
-            RoomVersion::OrgMatrixHydra11 => write!(f, "org.matrix.hydra.11"),
-            RoomVersion::Custom(s) => write!(f, "{s}"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -220,4 +232,30 @@ pub mod history_visibility_field {
 pub mod redaction_field {
     /// Redacts event field: redacts
     pub const REDACTS: &str = "redacts";
+}
+
+/// A reference to the `synapse.api.room_version.KNOWN_ROOM_VERSIONS`.
+static KNOWN_ROOM_VERSIONS: OnceCell<Py<PyAny>> = OnceCell::new();
+
+/// Access to the `synapse.api.room_version.KNOWN_ROOM_VERSIONS`.
+fn known_room_version_py(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
+    Ok(KNOWN_ROOM_VERSIONS
+        .get_or_try_init(|| -> PyResult<Py<PyAny>> {
+            let module = py.import("synapse.api.room_version")?;
+
+            let room_versions_class = module.getattr("KNOWN_ROOM_VERSIONS")?;
+
+            Ok(room_versions_class.unbind().into())
+        })?
+        .bind(py))
+}
+
+pub fn get_room_version_py<'a>(
+    room_version: &RoomVersion,
+    py: Python<'a>,
+) -> PyResult<Bound<'a, PyAny>> {
+    let room_version_module = known_room_version_py(py)?;
+    let room_version_str = room_version.as_str();
+    let room_version_py = room_version_module.get_item(room_version_str)?;
+    Ok(room_version_py)
 }

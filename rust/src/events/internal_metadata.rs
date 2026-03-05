@@ -275,7 +275,7 @@ pub struct EventInternalMetadata {
 #[pymethods]
 impl EventInternalMetadata {
     #[new]
-    fn new(dict: &Bound<'_, PyDict>) -> PyResult<Self> {
+    pub fn new(dict: &Bound<'_, PyDict>) -> PyResult<Self> {
         let mut data = Vec::with_capacity(dict.len());
 
         for (key, value) in dict.iter() {
