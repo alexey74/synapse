@@ -196,18 +196,14 @@ pub fn redact(event: &Value, room_version: &RoomVersion) -> anyhow::Result<Value
                 add_content_field(power_levels_field::INVITE);
             }
         }
-        M_ROOM_ALIASES => {
-            if use_special_case_aliases_auth(room_version) {
-                add_content_field(aliases_field::ALIASES);
-            }
+        M_ROOM_ALIASES if use_special_case_aliases_auth(room_version) => {
+            add_content_field(aliases_field::ALIASES);
         }
         M_ROOM_HISTORY_VISIBILITY => {
             add_content_field(history_visibility_field::HISTORY_VISIBILITY)
         }
-        M_ROOM_REDACTION => {
-            if use_updated_redaction_rules(room_version) {
-                add_content_field(redaction_field::REDACTS);
-            }
+        M_ROOM_REDACTION if use_updated_redaction_rules(room_version) => {
+            add_content_field(redaction_field::REDACTS);
         }
         _ => (),
     };

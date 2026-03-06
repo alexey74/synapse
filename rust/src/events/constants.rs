@@ -6,11 +6,7 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::Error;
 use once_cell::sync::OnceCell;
-use pyo3::{
-    types::PyAnyMethods, Borrowed, Bound, FromPyObject, Py, PyAny, PyErr, PyResult, Python,
-};
-
-use crate::events::Event;
+use pyo3::{types::PyAnyMethods, Bound, Py, PyAny, PyResult, Python};
 
 /// Maximum size of a PDU
 pub const MAX_PDU_SIZE_BYTES: usize = 65_535;
@@ -234,18 +230,18 @@ pub mod redaction_field {
     pub const REDACTS: &str = "redacts";
 }
 
-/// A reference to the `synapse.api.room_version.KNOWN_ROOM_VERSIONS`.
+/// A reference to the `synapse.api.room_versions.KNOWN_ROOM_VERSIONS`.
 static KNOWN_ROOM_VERSIONS: OnceCell<Py<PyAny>> = OnceCell::new();
 
-/// Access to the `synapse.api.room_version.KNOWN_ROOM_VERSIONS`.
+/// Access to the `synapse.api.room_versions.KNOWN_ROOM_VERSIONS`.
 fn known_room_version_py(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
     Ok(KNOWN_ROOM_VERSIONS
         .get_or_try_init(|| -> PyResult<Py<PyAny>> {
-            let module = py.import("synapse.api.room_version")?;
+            let module = py.import("synapse.api.room_versions")?;
 
             let room_versions_class = module.getattr("KNOWN_ROOM_VERSIONS")?;
 
-            Ok(room_versions_class.unbind().into())
+            Ok(room_versions_class.unbind())
         })?
         .bind(py))
 }

@@ -125,10 +125,21 @@ def return_json_error(
         error_ctx = exc.debug_context
         if error_ctx:
             logger.info(
-                "%s SynapseError: %s - %s (%s)", request, error_code, exc.msg, error_ctx
+                "%s SynapseError: %s - %s (%s)",
+                request,
+                error_code,
+                exc.msg,
+                error_ctx,
+                exc_info=(f.type, f.value, f.getTracebackObject()),
             )
         else:
-            logger.info("%s SynapseError: %s - %s", request, error_code, exc.msg)
+            logger.info(
+                "%s SynapseError: %s - %s",
+                request,
+                error_code,
+                exc.msg,
+                exc_info=(f.type, f.value, f.getTracebackObject()),
+            )
     elif f.check(CancelledError):
         error_code = HTTP_STATUS_REQUEST_CANCELLED
         error_dict = {"error": "Request cancelled", "errcode": Codes.UNKNOWN}

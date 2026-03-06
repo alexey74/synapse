@@ -633,7 +633,7 @@ class RoomCreationHandler:
                 if k[0] == EventTypes.SpaceChild and not old_event.content:
                     continue
 
-                initial_state[k] = old_event.content
+                initial_state[k] = dict(old_event.content)
 
         # deep-copy the power-levels event before we start modifying it
         # note that if frozen_dicts are enabled, `power_levels` will be a frozen

@@ -531,7 +531,7 @@ class RoomSummaryHandler:
             {
                 "type": e.type,
                 "state_key": e.state_key,
-                "content": e.content,
+                "content": dict(e.content),
                 "sender": e.sender,
                 "origin_server_ts": e.origin_server_ts,
             }

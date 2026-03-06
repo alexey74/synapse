@@ -558,14 +558,14 @@ class DelayedEventsHandler:
                     target=UserID.from_string(event.state_key),
                     room_id=event.room_id.to_string(),
                     action=membership,
-                    content=event.content,
+                    content=dict(event.content),
                     origin_server_ts=event.origin_server_ts,
                     delay_id=event.delay_id,
                 )
             else:
                 event_dict: JsonDict = {
                     "type": event.type,
-                    "content": event.content,
+                    "content": dict(event.content),
                     "room_id": event.room_id.to_string(),
                     "sender": user_id_str,
                 }

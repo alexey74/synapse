@@ -27,12 +27,13 @@ use std::{
 };
 
 use pyo3::{
-    exceptions::{PyException, PyKeyError, PyValueError},
+    exceptions::{PyAttributeError, PyException, PyKeyError, PyValueError},
     pyclass, pymethods,
     types::{
-        PyAnyMethods, PyDict, PyIterator, PyMapping, PyMappingMethods, PyModule, PyModuleMethods,
+        PyAnyMethods, PyDict, PyDictMethods, PyIterator, PyList, PyMapping, PyMappingMethods,
+        PyModule, PyModuleMethods,
     },
-    wrap_pyfunction, Bound, IntoPyObject, PyAny, PyResult, Python,
+    wrap_pyfunction, Bound, IntoPyObject, Py, PyAny, PyResult, Python,
 };
 use pythonize::{depythonize, pythonize};
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     events::{
         constants::{get_room_version_py, RoomVersion},
+        internal_metadata::EventInternalMetadata,
         utils::calculate_event_id,
     },
     identifier::EventID,
@@ -53,8 +55,9 @@ mod utils;
 /// Called when registering modules with python.
 pub fn register_module(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let child_module = PyModule::new(py, "events")?;
-    child_module.add_class::<internal_metadata::EventInternalMetadata>()?;
+    child_module.add_class::<EventInternalMetadata>()?;
     child_module.add_class::<JsonObject>()?;
+    child_module.add_class::<JsonObjectMutable>()?;
     child_module.add_class::<Event>()?;
     child_module.add_class::<Signatures>()?;
     child_module.add_class::<DomainSignatures>()?;
@@ -72,7 +75,7 @@ pub fn register_module(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
 }
 
 #[derive(Serialize, Deserialize)]
-#[pyclass(mapping)]
+#[pyclass(mapping, frozen)]
 #[derive(Clone)]
 #[serde(transparent)]
 struct JsonObject {
@@ -96,27 +99,209 @@ impl JsonObject {
         self.object.contains_key(key)
     }
 
-    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
         let Some(value) = self.object.get(key) else {
             return Err(PyKeyError::new_err(key.to_string()));
         };
-        Ok(Some(pythonize(py, value)?))
+        Ok(pythonize(py, value)?)
     }
 
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
-        PyIterator::from_object(
+        Ok(PyIterator::from_object(
             &self
                 .object
                 .keys()
                 .map(|k| &**k)
                 .collect::<Vec<_>>()
                 .into_pyobject(py)?,
-        )
+        )?)
+    }
+
+    fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(self
+            .object
+            .keys()
+            .map(|k| &**k)
+            .collect::<Vec<_>>()
+            .into_pyobject(py)?)
+    }
+
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let values: Vec<_> = self
+            .object
+            .values()
+            .map(|v| pythonize(py, v))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(values.into_pyobject(py)?)
+    }
+
+    fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let items: Vec<_> = self
+            .object
+            .iter()
+            .map(|(k, v)| PyResult::Ok((k.as_ref(), pythonize(py, v)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(items.into_pyobject(py)?)
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        key: &str,
+        default: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        match self.object.get(key) {
+            Some(value) => Ok(pythonize(py, value)?),
+            None => Ok(default.into_pyobject(py)?),
+        }
+    }
+
+    fn as_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(pythonize(py, &self)?)
+    }
+
+    fn __eq__(&self, other: Bound<'_, PyMapping>) -> bool {
+        let Ok(other_dict) = depythonize(&other) else {
+            return false;
+        };
+
+        *self.object == other_dict
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-#[pyclass(mapping)]
+#[pyclass(mapping, frozen)]
+#[serde(transparent)]
+struct JsonObjectMutable {
+    object: Arc<RwLock<HashMap<Box<str>, serde_json::Value>>>,
+}
+
+#[pymethods]
+impl JsonObjectMutable {
+    #[new]
+    fn new<'a, 'py>(object: &'a Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self {
+            object: Arc::new(RwLock::new(depythonize(object)?)),
+        })
+    }
+
+    fn __len__(&self) -> usize {
+        let obj = self.object.read().unwrap();
+        obj.len()
+    }
+
+    fn __contains__(&self, key: &str) -> bool {
+        let obj = self.object.read().unwrap();
+        obj.contains_key(key)
+    }
+
+    fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.object.read().unwrap();
+        let Some(value) = obj.get(key) else {
+            return Err(PyKeyError::new_err(key.to_string()));
+        };
+        Ok(pythonize(py, value)?)
+    }
+
+    fn __setitem__(&self, key: String, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let mut obj = self.object.write().unwrap();
+        obj.insert(key.into_boxed_str(), depythonize(value)?);
+        Ok(())
+    }
+
+    fn __delitem__(&self, key: &str) -> PyResult<()> {
+        let mut obj = self.object.write().unwrap();
+        if obj.remove(key).is_none() {
+            return Err(PyKeyError::new_err(key.to_string()));
+        }
+        Ok(())
+    }
+
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        let obj = self.object.read().unwrap();
+        Ok(PyIterator::from_object(
+            &obj.keys()
+                .map(|k| &**k)
+                .collect::<Vec<_>>()
+                .into_pyobject(py)?,
+        )?)
+    }
+
+    fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.object.read().unwrap();
+        Ok(obj
+            .keys()
+            .map(|k| &**k)
+            .collect::<Vec<_>>()
+            .into_pyobject(py)?)
+    }
+
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.object.read().unwrap();
+        let values: Vec<_> = obj
+            .values()
+            .map(|v| pythonize(py, v))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(values.into_pyobject(py)?)
+    }
+
+    fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.object.read().unwrap();
+        let items: Vec<_> = obj
+            .iter()
+            .map(|(k, v)| PyResult::Ok((k.as_ref(), pythonize(py, v)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(items.into_pyobject(py)?)
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        key: &str,
+        default: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.object.read().unwrap();
+        match obj.get(key) {
+            Some(value) => Ok(pythonize(py, value)?),
+            None => Ok(default.into_pyobject(py)?),
+        }
+    }
+
+    fn clear(&self) -> PyResult<()> {
+        let mut obj = self.object.write().unwrap();
+        obj.clear();
+        Ok(())
+    }
+
+    fn update(&self, other: &Bound<'_, PyMapping>) -> PyResult<()> {
+        let mut obj = self.object.write().unwrap();
+        for key in other.keys()? {
+            let key_str = key.extract::<String>()?;
+            let value = depythonize(&other.get_item(&key)?)?;
+            obj.insert(key_str.into_boxed_str(), value);
+        }
+        Ok(())
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn pop<'py>(
+        &self,
+        py: Python<'py>,
+        key: &str,
+        default: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let mut obj = self.object.write().unwrap();
+        match obj.remove(key) {
+            Some(value) => Ok(pythonize(py, &value)?),
+            None => Ok(default.into_pyobject(py)?),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[pyclass(mapping, frozen)]
 #[serde(transparent)]
 struct Signatures {
     signatures: Arc<RwLock<HashMap<Box<str>, DomainSignatures>>>,
@@ -153,13 +338,13 @@ impl Signatures {
         signatures.contains_key(key)
     }
 
-    fn __setitem__(&mut self, key: String, value: DomainSignatures) -> PyResult<()> {
+    fn __setitem__(&self, key: String, value: DomainSignatures) -> PyResult<()> {
         let mut signatures = self.signatures.write().unwrap();
         signatures.insert(key.into_boxed_str(), value);
         Ok(())
     }
 
-    fn __delitem__(&mut self, key: &str) -> PyResult<()> {
+    fn __delitem__(&self, key: &str) -> PyResult<()> {
         let mut signatures = self.signatures.write().unwrap();
         if signatures.remove(key).is_none() {
             return Err(PyKeyError::new_err(key.to_string()));
@@ -167,14 +352,15 @@ impl Signatures {
         Ok(())
     }
 
-    fn clear(&mut self) -> PyResult<()> {
+    fn clear(&self) -> PyResult<()> {
         let mut signatures = self.signatures.write().unwrap();
         signatures.clear();
         Ok(())
     }
 
+    #[pyo3(signature = (key, default=None))]
     fn pop<'py>(
-        &mut self,
+        &self,
         py: Python<'py>,
         key: &str,
         default: Option<Bound<'py, PyAny>>,
@@ -224,27 +410,59 @@ impl Signatures {
         }
     }
 
-    fn update(&mut self, other: &Bound<'_, PyMapping>) -> PyResult<()> {
+    fn update(&self, other: &Bound<'_, PyMapping>) -> PyResult<()> {
+        // Check if we're pointing at the same object, if so do nothing.
+        if let Ok(other_signatures) = other.cast::<Signatures>() {
+            if Arc::ptr_eq(&self.signatures, &other_signatures.get().signatures) {
+                return Ok(());
+            }
+        }
+
         let mut signatures = self.signatures.write().unwrap();
         for key in other.keys()? {
             let key_str = key.extract::<String>()?;
-            let value: HashMap<String, String> = other.get_item(&key)?.extract()?;
-            let value = DomainSignatures {
-                signatures: Arc::new(RwLock::new(
-                    value
-                        .into_iter()
-                        .map(|(k, v)| (k.into_boxed_str(), v.into_boxed_str()))
-                        .collect(),
-                )),
-            };
-            signatures.insert(key_str.into_boxed_str(), value);
+            let value = other.get_item(&key)?;
+            if let Ok(domain_signatures) = value.cast::<DomainSignatures>() {
+                signatures.insert(key_str.into_boxed_str(), domain_signatures.get().clone());
+                continue;
+            } else if let Ok(value_dict) = value.extract::<HashMap<String, String>>() {
+                let domain_signatures = DomainSignatures {
+                    signatures: Arc::new(RwLock::new(
+                        value_dict
+                            .into_iter()
+                            .map(|(k, v)| (k.into_boxed_str(), v.into_boxed_str()))
+                            .collect(),
+                    )),
+                };
+                signatures.insert(key_str.into_boxed_str(), domain_signatures);
+                continue;
+            } else if let Ok(mapping) = value.cast::<PyMapping>() {
+                let mut domain_signatures_map = HashMap::new();
+                for sub_key in mapping.keys()? {
+                    let sub_key_str = sub_key.extract::<String>()?;
+                    let sub_value = mapping.get_item(&sub_key)?;
+                    let sub_value_str = sub_value.extract::<String>()?;
+                    domain_signatures_map
+                        .insert(sub_key_str.into_boxed_str(), sub_value_str.into_boxed_str());
+                }
+                let domain_signatures = DomainSignatures {
+                    signatures: Arc::new(RwLock::new(domain_signatures_map)),
+                };
+                signatures.insert(key_str.into_boxed_str(), domain_signatures);
+                continue;
+            } else {
+                return Err(PyValueError::new_err(format!(
+                    "Value for key '{}' must be a DomainSignatures or a mapping",
+                    key_str
+                )));
+            }
         }
         Ok(())
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-#[pyclass(mapping)]
+#[pyclass(mapping, frozen)]
 #[serde(transparent)]
 struct DomainSignatures {
     signatures: Arc<RwLock<HashMap<Box<str>, Box<str>>>>,
@@ -265,16 +483,18 @@ impl DomainSignatures {
         signatures.len()
     }
 
-    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
         // This is a bit inefficient, but it avoids having to implement a custom
         // iterator type.
         let signatures = self.signatures.read().unwrap();
 
-        signatures
-            .keys()
-            .map(|k| &**k)
-            .collect::<Vec<_>>()
-            .into_pyobject(py)
+        PyIterator::from_object(
+            &signatures
+                .keys()
+                .map(|k| &**k)
+                .collect::<Vec<_>>()
+                .into_pyobject(py)?,
+        )
     }
 
     fn __contains__(&self, key: &str) -> bool {
@@ -282,12 +502,12 @@ impl DomainSignatures {
         signatures.contains_key(key)
     }
 
-    fn __setitem__(&mut self, key: &str, value: &str) {
+    fn __setitem__(&self, key: &str, value: &str) {
         let mut signatures = self.signatures.write().unwrap();
         signatures.insert(Box::from(key), Box::from(value));
     }
 
-    fn __delitem__(&mut self, key: &str) -> PyResult<()> {
+    fn __delitem__(&self, key: &str) -> PyResult<()> {
         let mut signatures = self.signatures.write().unwrap();
         if signatures.remove(key).is_none() {
             return Err(PyKeyError::new_err(key.to_string()));
@@ -333,14 +553,14 @@ impl DomainSignatures {
         }
     }
 
-    fn clear(&mut self) -> PyResult<()> {
+    fn clear(&self) -> PyResult<()> {
         let mut signatures = self.signatures.write().unwrap();
         signatures.clear();
         Ok(())
     }
 
     fn pop<'py>(
-        &mut self,
+        &self,
         py: Python<'py>,
         key: &str,
         default: Option<Bound<'py, PyAny>>,
@@ -352,7 +572,7 @@ impl DomainSignatures {
         }
     }
 
-    fn update(&mut self, other: &Bound<'_, PyMapping>) -> PyResult<()> {
+    fn update(&self, other: &Bound<'_, PyMapping>) -> PyResult<()> {
         let mut signatures: std::sync::RwLockWriteGuard<'_, HashMap<Box<str>, Box<str>>> =
             self.signatures.write().unwrap();
         for key in other.keys()? {
@@ -367,6 +587,7 @@ impl DomainSignatures {
 #[derive(Serialize, Deserialize)]
 struct EventCommonFields {
     content: JsonObject,
+    depth: i64,
     hashes: HashMap<String, String>,
     origin_server_ts: i64,
     sender: Box<str>,
@@ -377,18 +598,18 @@ struct EventCommonFields {
 
     room_id: Option<Box<str>>,
 
-    unsigned: JsonObject,
+    unsigned: JsonObjectMutable,
     signatures: Signatures,
 
     #[serde(flatten)]
     other_fields: HashMap<Box<str>, serde_json::Value>,
 }
 
-#[pyclass]
+#[pyclass(frozen, weakref)]
 struct Event {
     inner: EventFormatEnum,
     event_id: EventID,
-    internal_metadata: internal_metadata::EventInternalMetadata,
+    internal_metadata: Py<EventInternalMetadata>,
     room_version: RoomVersion,
     rejected_reason: Option<Box<str>>,
 }
@@ -397,6 +618,7 @@ struct Event {
 impl Event {
     #[new]
     fn new<'a, 'py>(
+        py: Python<'py>,
         event_dict: &'a Bound<'py, PyAny>,
         room_version: &'a Bound<'py, PyAny>,
         internal_metadata_dict: &'a Bound<'py, PyDict>,
@@ -429,8 +651,7 @@ impl Event {
 
         let event_format_v3: EventFormatV3Container = depythonize(event_dict)?;
 
-        let internal_metadata =
-            internal_metadata::EventInternalMetadata::new(internal_metadata_dict)?;
+        let internal_metadata = Py::new(py, EventInternalMetadata::new(internal_metadata_dict)?)?;
 
         let event_value = serde_json::to_value(&event_format_v3)
             .map_err(|err| PyException::new_err(format!("Failed to serialize event: {}", err)))?;
@@ -454,12 +675,25 @@ impl Event {
         }
     }
 
-    fn get_pdu_json<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        // We need to do a bunch of changes here.
+    #[pyo3(signature = (time_now = None))]
+    fn get_pdu_json<'py>(
+        &self,
+        py: Python<'py>,
+        time_now: Option<i64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        // TODO: We need to do a bunch of changes here.
         match &self.inner {
             EventFormatEnum::V3(format) => Ok(pythonize(py, format)?),
             // ...
         }
+    }
+
+    fn get_templated_pdu_json<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let obj = self.get_dict(py)?;
+        let dict = obj.cast::<PyDict>()?;
+        dict.del_item("hashes").ok();
+
+        Ok(obj)
     }
 
     #[getter]
@@ -492,6 +726,14 @@ impl Event {
     }
 
     #[getter]
+    fn depth(&self) -> PyResult<i64> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format.common_fields.depth),
+            // ...
+        }
+    }
+
+    #[getter]
     fn hashes(&self) -> PyResult<&HashMap<String, String>> {
         match &self.inner {
             EventFormatEnum::V3(format) => Ok(&format.common_fields.hashes),
@@ -515,15 +757,15 @@ impl Event {
         }
     }
 
-    #[getter]
-    fn state_key(&self) -> PyResult<&str> {
+    #[getter(state_key)]
+    fn state_key_attr(&self) -> PyResult<&str> {
         let state_key = match &self.inner {
             EventFormatEnum::V3(format) => &format.common_fields.state_key,
             // ...
         };
 
         let Some(state_key) = state_key.as_deref() else {
-            return Err(PyKeyError::new_err("state_key"));
+            return Err(PyAttributeError::new_err("state_key"));
         };
         Ok(state_key)
     }
@@ -537,7 +779,7 @@ impl Event {
     }
 
     #[getter]
-    fn unsigned(&self) -> PyResult<JsonObject> {
+    fn unsigned(&self) -> PyResult<JsonObjectMutable> {
         match &self.inner {
             EventFormatEnum::V3(format) => Ok(format.common_fields.unsigned.clone()),
             // ...
@@ -545,9 +787,8 @@ impl Event {
     }
 
     #[getter]
-    fn internal_metadata(&self) -> PyResult<internal_metadata::EventInternalMetadata> {
-        // TODO: Interior mutability
-        Ok(self.internal_metadata.clone())
+    fn internal_metadata(&self, py: Python<'_>) -> PyResult<Py<EventInternalMetadata>> {
+        Ok(Py::clone_ref(&self.internal_metadata, py))
     }
 
     #[getter]
@@ -558,6 +799,99 @@ impl Event {
     #[getter]
     fn room_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         get_room_version_py(&self.room_version, py)
+    }
+
+    fn prev_event_ids(&self) -> PyResult<Vec<String>> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format
+                .specific_fields
+                .prev_events
+                .iter()
+                .map(|s| s.to_string())
+                .collect()),
+            // ...
+        }
+    }
+
+    fn auth_event_ids(&self) -> PyResult<Vec<String>> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => Ok(format
+                .specific_fields
+                .auth_events
+                .iter()
+                .map(|s| s.to_string())
+                .collect()),
+            // ...
+        }
+    }
+
+    #[getter]
+    fn membership<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let content = self.content()?;
+        content.__getitem__(py, "membership")
+    }
+
+    #[getter]
+    fn redacts<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        // TODO: Handle redacts moving
+        let other_fields = match &self.inner {
+            EventFormatEnum::V3(format) => &format.common_fields.other_fields,
+            // ...
+        };
+
+        let Some(value) = other_fields.get("redacts") else {
+            return Ok(None);
+        };
+
+        Ok(Some(pythonize(py, value)?))
+    }
+
+    fn is_state(&self) -> bool {
+        match &self.inner {
+            EventFormatEnum::V3(format) => format.common_fields.state_key.is_some(),
+            // ...
+        }
+    }
+
+    fn get_state_key(&self) -> Option<&str> {
+        match &self.inner {
+            EventFormatEnum::V3(format) => format.common_fields.state_key.as_deref(),
+            // ...
+        }
+    }
+
+    fn __contains__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<bool> {
+        // TODO
+        let dict = self.get_dict(py)?;
+        dict.contains(key)
+    }
+
+    #[pyo3(signature = (key, default=None))]
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        key: &str,
+        default: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if self.get_dict(py)?.contains(key)? {
+            self.get_dict(py)?.get_item(key)
+        } else {
+            Ok(default.into_pyobject(py)?)
+        }
+    }
+
+    #[getter]
+    fn format_version(&self) -> u8 {
+        match &self.inner {
+            EventFormatEnum::V3(_) => 3,
+            // ...
+        }
+    }
+
+    fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let dict = self.get_dict(py)?;
+        let dict = dict.cast::<PyDict>()?;
+        Ok(dict.items())
     }
 }
 

@@ -108,7 +108,7 @@ class EventValidator:
         elif event.type == EventTypes.PowerLevels:
             try:
                 jsonschema.validate(
-                    instance=event.content,
+                    instance=dict(event.content),
                     schema=POWER_LEVELS_SCHEMA,
                     cls=POWER_LEVELS_VALIDATOR,
                 )

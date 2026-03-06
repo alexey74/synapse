@@ -95,3 +95,18 @@ if bool(os.environ.get("SYNAPSE_TEST_PATCH_LOG_CONTEXTS", False)):
 
 
 check_rust_lib_up_to_date()
+
+
+from collections.abc import Mapping, MutableMapping  # noqa: E402
+
+from synapse.synapse_rust.events import (  # noqa: E402
+    DomainSignatures,
+    JsonObject,
+    JsonObjectMutable,
+    Signatures,
+)
+
+Mapping.register(JsonObject)
+Mapping.register(Signatures)
+Mapping.register(DomainSignatures)
+MutableMapping.register(JsonObjectMutable)

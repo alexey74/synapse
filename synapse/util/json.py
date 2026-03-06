@@ -20,6 +20,8 @@ from typing import (
 
 from immutabledict import immutabledict
 
+from synapse.synapse_rust.events import JsonObject
+
 
 def _reject_invalid_json(val: Any) -> None:
     """Do not allow Infinity, -Infinity, or NaN values in JSON."""
@@ -39,6 +41,8 @@ def _handle_immutabledict(obj: Any) -> dict[Any, Any]:
         except AttributeError:
             # If all else fails, resort to making a copy of the immutabledict
             return dict(obj)
+    # if type(obj) is JsonObject:
+    #     return dict(obj)
     raise TypeError(
         "Object of type %s is not JSON serializable" % obj.__class__.__name__
     )

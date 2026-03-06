@@ -900,8 +900,8 @@ class EventCreationHandler:
             return None
 
         if prev_event and event.sender == prev_event.sender:
-            prev_content = encode_canonical_json(prev_event.content)
-            next_content = encode_canonical_json(event.content)
+            prev_content = encode_canonical_json(dict(prev_event.content))
+            next_content = encode_canonical_json(dict(event.content))
             if prev_content == next_content:
                 return prev_event
         return None
@@ -1572,7 +1572,7 @@ class EventCreationHandler:
 
             # Ensure that we can round trip before trying to persist in db
             try:
-                dump = json_encoder.encode(event.content)
+                dump = json_encoder.encode(dict(event.content))
                 json_decoder.decode(dump)
             except Exception:
                 logger.exception("Failed to encode content: %r", event.content)

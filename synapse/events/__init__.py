@@ -43,7 +43,7 @@ from synapse.api.constants import (
     StickyEvent,
 )
 from synapse.api.room_versions import EventFormatVersions, RoomVersion, RoomVersions
-from synapse.synapse_rust.events import EventInternalMetadata
+from synapse.synapse_rust.events import Event, EventInternalMetadata
 from synapse.types import (
     JsonDict,
     StrCollection,
@@ -256,9 +256,6 @@ class EventBase(metaclass=abc.ABCMeta):
 
     def get(self, key: str, default: Any | None = None) -> Any:
         return self._dict.get(key, default)
-
-    def get_internal_metadata_dict(self) -> JsonDict:
-        return self.internal_metadata.get_dict()
 
     def get_pdu_json(self, time_now: int | None = None) -> JsonDict:
         pdu_json = self.get_dict()
@@ -593,7 +590,7 @@ def _event_type_from_format_version(
     elif format_version == EventFormatVersions.ROOM_V3:
         return FrozenEventV2
     elif format_version == EventFormatVersions.ROOM_V4_PLUS:
-        return FrozenEventV3
+        return Event
     elif format_version == EventFormatVersions.ROOM_V11_HYDRA_PLUS:
         return FrozenEventV4
     else:

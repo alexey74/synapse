@@ -249,7 +249,7 @@ class RelationsHandler:
                     requester,
                     {
                         "type": EventTypes.Redaction,
-                        "content": initial_redaction_event.content,
+                        "content": dict(initial_redaction_event.content),
                         "room_id": initial_redaction_event.room_id,
                         "sender": requester.user.to_string(),
                         "redacts": related_event_id,
