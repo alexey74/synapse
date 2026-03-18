@@ -186,7 +186,7 @@ class InitialSyncHandler:
 
                 invite_event = await self.store.get_event(event.event_id)
                 d["invite"] = await self._event_serializer.serialize_event(
-                    FilteredEvent(event=invite_event, membership=None),
+                    FilteredEvent.state(event=invite_event),
                     time_now,
                     config=serializer_options,
                 )

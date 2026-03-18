@@ -448,7 +448,7 @@ class SyncRestServlet(RestServlet):
         invited = {}
         for room in rooms:
             invite = await self._event_serializer.serialize_event(
-                FilteredEvent(event=room.invite, membership=None),
+                FilteredEvent.state(event=room.invite),
                 time_now,
                 config=serialize_options,
             )
@@ -486,7 +486,7 @@ class SyncRestServlet(RestServlet):
         knocked = {}
         for room in rooms:
             knock = await self._event_serializer.serialize_event(
-                FilteredEvent(event=room.knock, membership=None),
+                FilteredEvent.state(event=room.knock),
                 time_now,
                 config=serialize_options,
             )
