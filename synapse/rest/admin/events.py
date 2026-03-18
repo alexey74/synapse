@@ -67,7 +67,7 @@ class EventRestServlet(RestServlet):
         )
         res = {
             "event": await self._event_serializer.serialize_event(
-                FilteredEvent(event=event, membership=None),
+                FilteredEvent.admin_override(event),
                 self._clock.time_msec(),
                 config=config,
             )

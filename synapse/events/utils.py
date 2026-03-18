@@ -440,6 +440,11 @@ class FilteredEvent:
         )
         return cls(event=event, membership=None)
 
+    @classmethod
+    def admin_override(cls, event: "EventBase") -> "FilteredEvent":
+        """Wrap an event that bypasses visibility filtering due to admin privileges."""
+        return cls(event=event, membership=None)
+
 
 @attr.s(slots=True, frozen=True, auto_attribs=True)
 class SerializeEventConfig:

@@ -1918,7 +1918,7 @@ class RoomContextHandler:
 
         async def filter_evts(events: list[EventBase]) -> list[FilteredEvent]:
             if use_admin_priviledge:
-                return [FilteredEvent(event=e, membership=None) for e in events]
+                return [FilteredEvent.admin_override(e) for e in events]
             return await filter_and_transform_events_for_client(
                 self._storage_controllers,
                 user.to_string(),

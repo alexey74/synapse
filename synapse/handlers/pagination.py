@@ -692,7 +692,7 @@ class PaginationHandler:
                 is_peeking=(member_event_id is None),
             )
         else:
-            client_events = [FilteredEvent(event=e, membership=None) for e in events]
+            client_events = [FilteredEvent.admin_override(e) for e in events]
 
         client_events_result: list[FilteredEvent] = client_events
 
