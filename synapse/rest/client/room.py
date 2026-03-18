@@ -52,8 +52,8 @@ from synapse.api.errors import (
 )
 from synapse.api.filtering import Filter
 from synapse.events.utils import (
-    FilteredEvent,
     EventClientSerializer,
+    FilteredEvent,
     SerializeEventConfig,
     format_event_for_client_v2,
 )

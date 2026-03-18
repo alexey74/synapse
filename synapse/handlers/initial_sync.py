@@ -225,7 +225,7 @@ class InitialSyncHandler:
                     )
                 ).addErrback(unwrapFirstError)
 
-                client_messages: list[
+                filtered_messages: list[
                     FilteredEvent
                 ] = await filter_and_transform_events_for_client(
                     self._storage_controllers,
@@ -242,7 +242,7 @@ class InitialSyncHandler:
                 d["messages"] = {
                     "chunk": (
                         await self._event_serializer.serialize_events(
-                            client_messages,
+                            filtered_messages,
                             time_now=time_now,
                             config=serializer_options,
                         )
@@ -384,7 +384,7 @@ class InitialSyncHandler:
             room_id, limit=pagin_config.limit, end_token=stream_token
         )
 
-        client_messages: list[
+        filtered_messages: list[
             FilteredEvent
         ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
@@ -406,7 +406,7 @@ class InitialSyncHandler:
                 "chunk": (
                     # Don't bundle aggregations as this is a deprecated API.
                     await self._event_serializer.serialize_events(
-                        client_messages, time_now, config=serialize_options
+                        filtered_messages, time_now, config=serialize_options
                     )
                 ),
                 "start": await start_token.to_string(self.store),
@@ -502,7 +502,7 @@ class InitialSyncHandler:
             ).addErrback(unwrapFirstError)
         )
 
-        client_messages: list[
+        filtered_messages: list[
             FilteredEvent
         ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
@@ -520,7 +520,7 @@ class InitialSyncHandler:
                 "chunk": (
                     # Don't bundle aggregations as this is a deprecated API.
                     await self._event_serializer.serialize_events(
-                        client_messages, time_now, config=serialize_options
+                        filtered_messages, time_now, config=serialize_options
                     )
                 ),
                 "start": await start_token.to_string(self.store),

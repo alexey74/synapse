@@ -543,9 +543,9 @@ class Mailer:
             results.events_before + [notif_event],
         )
 
-        for client_event in the_events:
+        for filtered_event in the_events:
             messagevars = await self._get_message_vars(
-                notif, client_event.event, room_state_ids
+                notif, filtered_event.event, room_state_ids
             )
             if messagevars is not None:
                 ret["messages"].append(messagevars)

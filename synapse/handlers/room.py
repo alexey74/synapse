@@ -1946,21 +1946,23 @@ class RoomContextHandler:
             events_before = await event_filter.filter(events_before)
             events_after = await event_filter.filter(events_after)
 
-        client_events_before = await filter_evts(events_before)
-        client_events_after = await filter_evts(events_after)
+        filtered_events_before = await filter_evts(events_before)
+        filtered_events_after = await filter_evts(events_after)
         # filter_evts can return a pruned event in case the user is allowed to see that
         # there's something there but not see the content, so use the event that's in
         # `filtered` rather than the event we retrieved from the datastore.
-        client_event = filtered[0]
+        filtered_event = filtered[0]
 
         # Fetch the aggregations.
         aggregations = await self._relations_handler.get_bundled_aggregations(
-            itertools.chain(client_events_before, (client_event,), client_events_after),
+            itertools.chain(
+                filtered_events_before, (filtered_event,), filtered_events_after
+            ),
             user.to_string(),
         )
 
-        if client_events_after:
-            last_event_id = client_events_after[-1].event.event_id
+        if filtered_events_after:
+            last_event_id = filtered_events_after[-1].event.event_id
         else:
             last_event_id = event_id
 
@@ -1968,9 +1970,9 @@ class RoomContextHandler:
             state_filter = StateFilter.from_lazy_load_member_list(
                 ev.event.sender
                 for ev in itertools.chain(
-                    client_events_before,
-                    (client_event,),
-                    client_events_after,
+                    filtered_events_before,
+                    (filtered_event,),
+                    filtered_events_after,
                 )
             )
         else:
@@ -1993,9 +1995,9 @@ class RoomContextHandler:
         token = StreamToken.START
 
         return EventContext(
-            events_before=client_events_before,
-            event=client_event,
-            events_after=client_events_after,
+            events_before=filtered_events_before,
+            event=filtered_event,
+            events_after=filtered_events_after,
             state=state_events,
             aggregations=aggregations,
             start=await token.copy_and_replace(

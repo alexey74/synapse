@@ -588,15 +588,15 @@ class SyncRestServlet(RestServlet):
                     room.room_id,
                     event.room_id,
                 )
-        for client_event in timeline_events:
+        for filtered_event in timeline_events:
             # We've had bug reports that events were coming down under the
             # wrong room.
-            if client_event.event.room_id != room.room_id:
+            if filtered_event.event.room_id != room.room_id:
                 logger.warning(
                     "Event %r is under room %r instead of %r",
-                    client_event.event.event_id,
+                    filtered_event.event.event_id,
                     room.room_id,
-                    client_event.event.room_id,
+                    filtered_event.event.room_id,
                 )
 
         serialized_state = await self._event_serializer.serialize_events(

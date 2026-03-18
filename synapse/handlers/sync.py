@@ -700,7 +700,7 @@ class SyncHandler:
 
             log_kv({"limited": limited})
 
-            client_recents: list[FilteredEvent]
+            filtered_recents: list[FilteredEvent]
             if potential_recents:
                 recents = await sync_config.filter_collection.filter_room_timeline(
                     potential_recents
@@ -727,22 +727,24 @@ class SyncHandler:
                         )
                     )
 
-                client_recents = await filter_and_transform_events_for_client(
+                filtered_recents = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     sync_config.user.to_string(),
                     recents,
                     always_include_ids=current_state_ids,
                 )
-                log_kv({"recents_after_visibility_filtering": len(client_recents)})
+                log_kv({"recents_after_visibility_filtering": len(filtered_recents)})
             else:
-                client_recents = []
+                filtered_recents = []
 
             if not limited or block_all_timeline:
                 prev_batch_token = upto_token
-                if client_recents:
-                    assert client_recents[0].event.internal_metadata.stream_ordering
+                if filtered_recents:
+                    assert filtered_recents[0].event.internal_metadata.stream_ordering
                     room_key = RoomStreamToken(
-                        stream=client_recents[0].event.internal_metadata.stream_ordering
+                        stream=filtered_recents[
+                            0
+                        ].event.internal_metadata.stream_ordering
                         - 1
                     )
                     prev_batch_token = upto_token.copy_and_replace(
@@ -750,7 +752,7 @@ class SyncHandler:
                     )
 
                 return TimelineBatch(
-                    events=client_recents, prev_batch=prev_batch_token, limited=False
+                    events=filtered_recents, prev_batch=prev_batch_token, limited=False
                 )
 
             filtering_factor = 2
@@ -767,7 +769,7 @@ class SyncHandler:
             elif since_token and not newly_joined_room:
                 since_key = since_token.room_key
 
-            while limited and len(client_recents) < timeline_limit and max_repeat:
+            while limited and len(filtered_recents) < timeline_limit and max_repeat:
                 # For initial `/sync`, we want to view a historical section of the
                 # timeline; to fetch events by `topological_ordering` (best
                 # representation of the room DAG as others were seeing it at the time).
@@ -838,7 +840,7 @@ class SyncHandler:
                         )
                     )
 
-                loaded_recents_client: list[
+                loaded_filtered_recents: list[
                     FilteredEvent
                 ] = await filter_and_transform_events_for_client(
                     self._storage_controllers,
@@ -850,22 +852,23 @@ class SyncHandler:
                 log_kv(
                     {
                         "loaded_recents_after_client_filtering": len(
-                            loaded_recents_client
+                            loaded_filtered_recents
                         )
                     }
                 )
 
-                loaded_recents_client.extend(client_recents)
-                client_recents = loaded_recents_client
+                loaded_filtered_recents.extend(filtered_recents)
+                filtered_recents = loaded_filtered_recents
 
                 max_repeat -= 1
 
-            if len(client_recents) > timeline_limit:
+            if len(filtered_recents) > timeline_limit:
                 limited = True
-                client_recents = client_recents[-timeline_limit:]
-                assert client_recents[0].event.internal_metadata.stream_ordering
+                filtered_recents = filtered_recents[-timeline_limit:]
+                assert filtered_recents[0].event.internal_metadata.stream_ordering
                 room_key = RoomStreamToken(
-                    stream=client_recents[0].event.internal_metadata.stream_ordering - 1
+                    stream=filtered_recents[0].event.internal_metadata.stream_ordering
+                    - 1
                 )
 
             prev_batch_token = upto_token.copy_and_replace(StreamKeyType.ROOM, room_key)
@@ -876,12 +879,12 @@ class SyncHandler:
         if limited or newly_joined_room:
             bundled_aggregations = (
                 await self._relations_handler.get_bundled_aggregations(
-                    client_recents, sync_config.user.to_string()
+                    filtered_recents, sync_config.user.to_string()
                 )
             )
 
         return TimelineBatch(
-            events=client_recents,
+            events=filtered_recents,
             prev_batch=prev_batch_token,
             # Also mark as limited if this is a new room or there has been a gap
             # (to force client to paginate the gap).

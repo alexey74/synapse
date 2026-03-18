@@ -154,7 +154,9 @@ class RelationsHandler:
             [e.event_id for e in related_events]
         )
 
-        client_events: list[FilteredEvent] = await filter_and_transform_events_for_client(
+        filtered_events: list[
+            FilteredEvent
+        ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             user_id,
             events,
@@ -164,14 +166,14 @@ class RelationsHandler:
         # The relations returned for the requested event do include their
         # bundled aggregations.
         aggregations = await self.get_bundled_aggregations(
-            client_events, requester.user.to_string()
+            filtered_events, requester.user.to_string()
         )
 
         now = self._clock.time_msec()
         serialize_options = SerializeEventConfig(requester=requester)
         return_value: JsonDict = {
             "chunk": await self._event_serializer.serialize_events(
-                client_events,
+                filtered_events,
                 now,
                 bundle_aggregations=aggregations,
                 config=serialize_options,
@@ -602,7 +604,9 @@ class RelationsHandler:
             # Limit the returned threads to those the user has participated in.
             events = [event for event in events if participated[event.event_id]]
 
-        client_events: list[FilteredEvent] = await filter_and_transform_events_for_client(
+        filtered_events: list[
+            FilteredEvent
+        ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             user_id,
             events,
@@ -610,12 +614,12 @@ class RelationsHandler:
         )
 
         aggregations = await self.get_bundled_aggregations(
-            client_events, requester.user.to_string()
+            filtered_events, requester.user.to_string()
         )
 
         now = self._clock.time_msec()
         serialized_events = await self._event_serializer.serialize_events(
-            client_events, now, bundle_aggregations=aggregations
+            filtered_events, now, bundle_aggregations=aggregations
         )
 
         return_value: JsonDict = {"chunk": serialized_events}

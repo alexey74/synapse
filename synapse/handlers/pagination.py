@@ -685,20 +685,18 @@ class PaginationHandler:
             events = await event_filter.filter(events)
 
         if not use_admin_priviledge:
-            client_events = await filter_and_transform_events_for_client(
+            filtered_events = await filter_and_transform_events_for_client(
                 self._storage_controllers,
                 user_id,
                 events,
                 is_peeking=(member_event_id is None),
             )
         else:
-            client_events = [FilteredEvent.admin_override(e) for e in events]
-
-        client_events_result: list[FilteredEvent] = client_events
+            filtered_events = [FilteredEvent.admin_override(e) for e in events]
 
         # if after the filter applied there are no more events
         # return immediately - but there might be more in next_token batch
-        if not client_events_result:
+        if not filtered_events:
             return GetMessagesResult(
                 messages_chunk=[],
                 bundled_aggregations={},
@@ -708,21 +706,16 @@ class PaginationHandler:
             )
 
         state = None
-        if (
-            event_filter
-            and event_filter.lazy_load_members
-            and len(client_events_result) > 0
-        ):
+        if event_filter and event_filter.lazy_load_members and len(filtered_events) > 0:
             # TODO: remove redundant members
 
             # FIXME: we also care about invite targets etc.
             state_filter = StateFilter.from_types(
-                (EventTypes.Member, event.event.sender)
-                for event in client_events_result
+                (EventTypes.Member, event.event.sender) for event in filtered_events
             )
 
             state_ids = await self._state_storage_controller.get_state_ids_for_event(
-                client_events_result[0].event.event_id, state_filter=state_filter
+                filtered_events[0].event.event_id, state_filter=state_filter
             )
 
             if state_ids:
@@ -730,11 +723,11 @@ class PaginationHandler:
                 state = list(state_dict.values())
 
         aggregations = await self._relations_handler.get_bundled_aggregations(
-            client_events_result, user_id
+            filtered_events, user_id
         )
 
         return GetMessagesResult(
-            messages_chunk=client_events_result,
+            messages_chunk=filtered_events,
             bundled_aggregations=aggregations,
             state=state,
             start_token=from_token,
