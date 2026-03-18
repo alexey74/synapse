@@ -30,7 +30,7 @@ from synapse.api.filtering import FilterCollection
 from synapse.api.presence import UserPresenceState
 from synapse.api.ratelimiting import Ratelimiter
 from synapse.events.utils import (
-    ClientEvent,
+    FilteredEvent,
     SerializeEventConfig,
     format_event_for_client_v2_without_room_id,
     format_event_raw,
@@ -448,7 +448,7 @@ class SyncRestServlet(RestServlet):
         invited = {}
         for room in rooms:
             invite = await self._event_serializer.serialize_event(
-                ClientEvent(event=room.invite, membership=None),
+                FilteredEvent(event=room.invite, membership=None),
                 time_now,
                 config=serialize_options,
             )
@@ -486,7 +486,7 @@ class SyncRestServlet(RestServlet):
         knocked = {}
         for room in rooms:
             knock = await self._event_serializer.serialize_event(
-                ClientEvent(event=room.knock, membership=None),
+                FilteredEvent(event=room.knock, membership=None),
                 time_now,
                 config=serialize_options,
             )
@@ -600,7 +600,7 @@ class SyncRestServlet(RestServlet):
                 )
 
         serialized_state = await self._event_serializer.serialize_events(
-            [ClientEvent.state(e) for e in state_events],
+            [FilteredEvent.state(e) for e in state_events],
             time_now,
             config=serialize_options,
         )
@@ -990,7 +990,7 @@ class SlidingSyncRestServlet(RestServlet):
             ):
                 serialized_required_state = (
                     await self.event_serializer.serialize_events(
-                        [ClientEvent.state(e) for e in room_result.required_state],
+                        [FilteredEvent.state(e) for e in room_result.required_state],
                         time_now,
                         config=serialize_options,
                     )

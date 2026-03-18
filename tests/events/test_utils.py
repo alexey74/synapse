@@ -29,7 +29,7 @@ from synapse.api.constants import EventContentFields
 from synapse.api.room_versions import RoomVersions
 from synapse.events import EventBase, make_event_from_dict
 from synapse.events.utils import (
-    ClientEvent,
+    FilteredEvent,
     PowerLevelsContent,
     SerializeEventConfig,
     _split_field,
@@ -661,7 +661,7 @@ class SerializeEventTestCase(HomeserverTestCase):
     ) -> JsonDict:
         return self.get_success(
             self._event_serializer.serialize_event(
-                ClientEvent(event=ev, membership=None),
+                FilteredEvent(event=ev, membership=None),
                 1479807801915,
                 config=SerializeEventConfig(
                     only_event_fields=fields,
@@ -782,7 +782,7 @@ class SerializeEventTestCase(HomeserverTestCase):
     def test_event_fields_fail_if_fields_not_str(self) -> None:
         self.get_failure(
             self._event_serializer.serialize_event(
-                ClientEvent(
+                FilteredEvent(
                     event=MockEvent(room_id="!foo:bar", content={"foo": "bar"}),
                     membership=None,
                 ),

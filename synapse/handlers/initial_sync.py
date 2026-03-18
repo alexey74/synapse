@@ -30,7 +30,7 @@ from synapse.api.constants import (
     Membership,
 )
 from synapse.api.errors import SynapseError
-from synapse.events.utils import ClientEvent, SerializeEventConfig
+from synapse.events.utils import FilteredEvent, SerializeEventConfig
 from synapse.events.validator import EventValidator
 from synapse.handlers.presence import format_user_presence_state
 from synapse.handlers.receipts import ReceiptEventSource
@@ -186,7 +186,7 @@ class InitialSyncHandler:
 
                 invite_event = await self.store.get_event(event.event_id)
                 d["invite"] = await self._event_serializer.serialize_event(
-                    ClientEvent(event=invite_event, membership=None),
+                    FilteredEvent(event=invite_event, membership=None),
                     time_now,
                     config=serializer_options,
                 )
@@ -226,7 +226,7 @@ class InitialSyncHandler:
                 ).addErrback(unwrapFirstError)
 
                 client_messages: list[
-                    ClientEvent
+                    FilteredEvent
                 ] = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     user_id,
@@ -252,7 +252,7 @@ class InitialSyncHandler:
                 }
 
                 d["state"] = await self._event_serializer.serialize_events(
-                    [ClientEvent.state(e) for e in current_state.values()],
+                    [FilteredEvent.state(e) for e in current_state.values()],
                     time_now=time_now,
                     config=serializer_options,
                 )
@@ -385,7 +385,7 @@ class InitialSyncHandler:
         )
 
         client_messages: list[
-            ClientEvent
+            FilteredEvent
         ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             requester.user.to_string(),
@@ -415,7 +415,7 @@ class InitialSyncHandler:
             "state": (
                 # Don't bundle aggregations as this is a deprecated API.
                 await self._event_serializer.serialize_events(
-                    [ClientEvent.state(e) for e in room_state.values()],
+                    [FilteredEvent.state(e) for e in room_state.values()],
                     time_now,
                     config=serialize_options,
                 )
@@ -441,7 +441,7 @@ class InitialSyncHandler:
         serialize_options = SerializeEventConfig(requester=requester)
         # Don't bundle aggregations as this is a deprecated API.
         state = await self._event_serializer.serialize_events(
-            [ClientEvent.state(e) for e in current_state.values()],
+            [FilteredEvent.state(e) for e in current_state.values()],
             time_now,
             config=serialize_options,
         )
@@ -503,7 +503,7 @@ class InitialSyncHandler:
         )
 
         client_messages: list[
-            ClientEvent
+            FilteredEvent
         ] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             requester.user.to_string(),

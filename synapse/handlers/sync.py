@@ -43,7 +43,7 @@ from synapse.api.filtering import FilterCollection
 from synapse.api.presence import UserPresenceState
 from synapse.api.room_versions import KNOWN_ROOM_VERSIONS
 from synapse.events import EventBase
-from synapse.events.utils import ClientEvent
+from synapse.events.utils import FilteredEvent
 from synapse.handlers.relations import BundledAggregations
 from synapse.logging import issue9533_logger
 from synapse.logging.context import current_context
@@ -124,7 +124,7 @@ class SyncConfig:
 @attr.s(slots=True, frozen=True, auto_attribs=True)
 class TimelineBatch:
     prev_batch: StreamToken
-    events: Sequence[ClientEvent]
+    events: Sequence[FilteredEvent]
     limited: bool
     # A mapping of event ID to the bundled aggregations for the above events.
     # This is only calculated if limited is true.
@@ -149,7 +149,7 @@ class JoinedSyncResult:
     state: StateMap[EventBase]
     ephemeral: list[JsonDict]
     account_data: list[JsonDict]
-    sticky: list[ClientEvent]
+    sticky: list[FilteredEvent]
     unread_notifications: JsonDict
     unread_thread_notifications: JsonDict
     summary: JsonDict | None
@@ -700,7 +700,7 @@ class SyncHandler:
 
             log_kv({"limited": limited})
 
-            client_recents: list[ClientEvent]
+            client_recents: list[FilteredEvent]
             if potential_recents:
                 recents = await sync_config.filter_collection.filter_room_timeline(
                     potential_recents
@@ -839,7 +839,7 @@ class SyncHandler:
                     )
 
                 loaded_recents_client: list[
-                    ClientEvent
+                    FilteredEvent
                 ] = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     sync_config.user.to_string(),
@@ -2883,7 +2883,7 @@ class SyncHandler:
 
             if room_builder.rtype == "joined":
                 unread_notifications: dict[str, int] = {}
-                sticky_events: list[ClientEvent] = []
+                sticky_events: list[FilteredEvent] = []
                 if sticky_event_ids:
                     # As per MSC4354:
                     # Remove sticky events that are already in the timeline, else we will needlessly duplicate

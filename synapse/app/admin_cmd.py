@@ -34,7 +34,7 @@ from synapse.config._base import ConfigError
 from synapse.config.homeserver import HomeServerConfig
 from synapse.config.logger import setup_logging
 from synapse.events import EventBase
-from synapse.events.utils import ClientEvent
+from synapse.events.utils import FilteredEvent
 from synapse.handlers.admin import ExfiltrationWriter
 from synapse.server import HomeServer
 from synapse.storage.database import DatabasePool, LoggingDatabaseConnection
@@ -151,7 +151,7 @@ class FileExfiltrationWriter(ExfiltrationWriter):
         if list(os.listdir(self.base_directory)):
             raise Exception("Directory must be empty")
 
-    def write_events(self, room_id: str, events: list[ClientEvent]) -> None:
+    def write_events(self, room_id: str, events: list[FilteredEvent]) -> None:
         room_directory = os.path.join(self.base_directory, "rooms", room_id)
         os.makedirs(room_directory, exist_ok=True)
         events_file = os.path.join(room_directory, "events")
@@ -176,7 +176,7 @@ class FileExfiltrationWriter(ExfiltrationWriter):
     def write_invite(
         self, room_id: str, event: EventBase, state: StateMap[EventBase]
     ) -> None:
-        self.write_events(room_id, [ClientEvent(event=event, membership=None)])
+        self.write_events(room_id, [FilteredEvent(event=event, membership=None)])
 
         # We write the invite state somewhere else as they aren't full events
         # and are only a subset of the state at the event.
@@ -192,7 +192,7 @@ class FileExfiltrationWriter(ExfiltrationWriter):
     def write_knock(
         self, room_id: str, event: EventBase, state: StateMap[EventBase]
     ) -> None:
-        self.write_events(room_id, [ClientEvent(event=event, membership=None)])
+        self.write_events(room_id, [FilteredEvent(event=event, membership=None)])
 
         # We write the knock state somewhere else as they aren't full events
         # and are only a subset of the state at the event.

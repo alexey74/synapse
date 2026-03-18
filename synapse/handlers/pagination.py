@@ -29,7 +29,7 @@ from synapse.api.constants import Direction, EventTypes, Membership
 from synapse.api.errors import SynapseError
 from synapse.api.filtering import Filter
 from synapse.events import EventBase
-from synapse.events.utils import ClientEvent
+from synapse.events.utils import FilteredEvent
 from synapse.handlers.relations import BundledAggregations
 from synapse.handlers.worker_lock import NEW_EVENT_DURING_PURGE_LOCK_NAME
 from synapse.logging.opentracing import trace
@@ -80,7 +80,7 @@ class GetMessagesResult:
     Everything needed to serialize a `/messages` response.
     """
 
-    messages_chunk: list[ClientEvent]
+    messages_chunk: list[FilteredEvent]
     """
     A list of room events.
 
@@ -692,9 +692,9 @@ class PaginationHandler:
                 is_peeking=(member_event_id is None),
             )
         else:
-            client_events = [ClientEvent(event=e, membership=None) for e in events]
+            client_events = [FilteredEvent(event=e, membership=None) for e in events]
 
-        client_events_result: list[ClientEvent] = client_events
+        client_events_result: list[FilteredEvent] = client_events
 
         # if after the filter applied there are no more events
         # return immediately - but there might be more in next_token batch

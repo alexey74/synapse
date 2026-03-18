@@ -67,7 +67,7 @@ from synapse.api.room_versions import KNOWN_ROOM_VERSIONS, RoomVersion
 from synapse.event_auth import validate_event_for_room_version
 from synapse.events import EventBase
 from synapse.events.snapshot import UnpersistedEventContext
-from synapse.events.utils import ClientEvent, copy_and_fixup_power_levels_contents
+from synapse.events.utils import FilteredEvent, copy_and_fixup_power_levels_contents
 from synapse.handlers.relations import BundledAggregations
 from synapse.rest.admin._base import assert_user_is_admin
 from synapse.streams import EventSource
@@ -109,9 +109,9 @@ FIVE_MINUTES_IN_MS = 5 * 60 * 1000
 
 @attr.s(slots=True, frozen=True, auto_attribs=True)
 class EventContext:
-    events_before: list[ClientEvent]
-    event: ClientEvent
-    events_after: list[ClientEvent]
+    events_before: list[FilteredEvent]
+    event: FilteredEvent
+    events_after: list[FilteredEvent]
     state: list[EventBase]
     aggregations: dict[str, BundledAggregations]
     start: str
@@ -1916,9 +1916,9 @@ class RoomContextHandler:
         # The user is peeking if they aren't in the room already
         is_peeking = not is_user_in_room
 
-        async def filter_evts(events: list[EventBase]) -> list[ClientEvent]:
+        async def filter_evts(events: list[EventBase]) -> list[FilteredEvent]:
             if use_admin_priviledge:
-                return [ClientEvent(event=e, membership=None) for e in events]
+                return [FilteredEvent(event=e, membership=None) for e in events]
             return await filter_and_transform_events_for_client(
                 self._storage_controllers,
                 user.to_string(),

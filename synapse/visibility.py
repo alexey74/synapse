@@ -37,7 +37,7 @@ from synapse.api.constants import (
 )
 from synapse.events import EventBase
 from synapse.events.snapshot import EventContext
-from synapse.events.utils import ClientEvent, prune_event
+from synapse.events.utils import FilteredEvent, prune_event
 from synapse.logging.opentracing import trace
 from synapse.storage.controllers import StorageControllers
 from synapse.storage.databases.main import DataStore
@@ -81,7 +81,7 @@ async def filter_and_transform_events_for_client(
     is_peeking: bool = False,
     always_include_ids: frozenset[str] = frozenset(),
     filter_send_to_client: bool = True,
-) -> list[ClientEvent]:
+) -> list[FilteredEvent]:
     """
     Check which events a user is allowed to see. If the user can see the event but its
     sender asked for their data to be erased, prune the content of the event.
@@ -101,7 +101,7 @@ async def filter_and_transform_events_for_client(
             also be called to check whether a user can see the state at a given point.
 
     Returns:
-        The filtered events, wrapped in ClientEvent with the requesting user's
+        The filtered events, wrapped in FilteredEvent with the requesting user's
         membership at each event annotated for use during serialization (MSC4115).
     """
     # Filter out events that have been soft failed so that we don't relay them
@@ -175,7 +175,7 @@ async def filter_and_transform_events_for_client(
                 room_id
             ] = await storage.main.get_retention_policy_for_room(room_id)
 
-    def allowed(event: EventBase) -> ClientEvent | None:
+    def allowed(event: EventBase) -> FilteredEvent | None:
         state_after_event = event_id_to_state.get(event.event_id)
         filtered = _check_client_allowed_to_see_event(
             user_id=user_id,
@@ -232,9 +232,9 @@ async def filter_and_transform_events_for_client(
             else Membership.LEAVE
         )
 
-        return ClientEvent(event=filtered, membership=user_membership)
+        return FilteredEvent(event=filtered, membership=user_membership)
 
-    # Check each event: gives an iterable of None or a ClientEvent.
+    # Check each event: gives an iterable of None or a FilteredEvent.
     filtered_events = map(allowed, events)
 
     # Turn it into a list and remove None entries before returning.

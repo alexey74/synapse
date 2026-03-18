@@ -33,7 +33,7 @@ import attr
 from synapse.api.constants import Direction, EventTypes, RelationTypes
 from synapse.api.errors import SynapseError
 from synapse.events import EventBase, relation_from_event
-from synapse.events.utils import ClientEvent, SerializeEventConfig
+from synapse.events.utils import FilteredEvent, SerializeEventConfig
 from synapse.logging.context import make_deferred_yieldable, run_in_background
 from synapse.logging.opentracing import trace
 from synapse.storage.databases.main.relations import ThreadsNextBatch, _RelatedEvent
@@ -154,7 +154,7 @@ class RelationsHandler:
             [e.event_id for e in related_events]
         )
 
-        client_events: list[ClientEvent] = await filter_and_transform_events_for_client(
+        client_events: list[FilteredEvent] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             user_id,
             events,
@@ -432,7 +432,7 @@ class RelationsHandler:
 
     @trace
     async def get_bundled_aggregations(
-        self, events: Iterable[EventBase | ClientEvent], user_id: str
+        self, events: Iterable[EventBase | FilteredEvent], user_id: str
     ) -> dict[str, BundledAggregations]:
         """Generate bundled aggregations for events.
 
@@ -449,8 +449,8 @@ class RelationsHandler:
             The results may include additional events which are related to the
             requested events.
         """
-        # Unwrap ClientEvent wrappers to get bare EventBase objects.
-        base_events = [e.event if isinstance(e, ClientEvent) else e for e in events]
+        # Unwrap FilteredEvent wrappers to get bare EventBase objects.
+        base_events = [e.event if isinstance(e, FilteredEvent) else e for e in events]
 
         # De-duplicated events by ID to handle the same event requested multiple times.
         events_by_id = {}
@@ -602,7 +602,7 @@ class RelationsHandler:
             # Limit the returned threads to those the user has participated in.
             events = [event for event in events if participated[event.event_id]]
 
-        client_events: list[ClientEvent] = await filter_and_transform_events_for_client(
+        client_events: list[FilteredEvent] = await filter_and_transform_events_for_client(
             self._storage_controllers,
             user_id,
             events,

@@ -52,7 +52,7 @@ from synapse.api.errors import (
 )
 from synapse.api.filtering import Filter
 from synapse.events.utils import (
-    ClientEvent,
+    FilteredEvent,
     EventClientSerializer,
     SerializeEventConfig,
     format_event_for_client_v2,
@@ -287,7 +287,7 @@ class RoomStateEventRestServlet(RestServlet):
 
         if format == "event":
             event = await self._event_serializer.serialize_event(
-                ClientEvent.state(data),
+                FilteredEvent.state(data),
                 self.clock.time_msec(),
                 config=SerializeEventConfig(
                     event_format=format_event_for_client_v2,
@@ -867,7 +867,7 @@ async def encode_messages_response(
         serialized_result[
             "state"
         ] = await serialize_deps.event_serializer.serialize_events(
-            [ClientEvent.state(e) for e in get_messages_result.state],
+            [FilteredEvent.state(e) for e in get_messages_result.state],
             time_now,
             config=serialize_options,
         )
@@ -1175,7 +1175,7 @@ class RoomEventContextServlet(RestServlet):
                 config=serializer_options,
             ),
             "state": await self._event_serializer.serialize_events(
-                [ClientEvent.state(e) for e in event_context.state],
+                [FilteredEvent.state(e) for e in event_context.state],
                 time_now,
                 config=serializer_options,
             ),

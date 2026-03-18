@@ -33,7 +33,7 @@ import attr
 from synapse.api.constants import Direction, EventTypes, Membership
 from synapse.api.errors import SynapseError
 from synapse.events import EventBase
-from synapse.events.utils import ClientEvent
+from synapse.events.utils import FilteredEvent
 from synapse.types import (
     JsonMapping,
     Requester,
@@ -520,7 +520,7 @@ class ExfiltrationWriter(metaclass=abc.ABCMeta):
     """Interface used to specify how to write exported data."""
 
     @abc.abstractmethod
-    def write_events(self, room_id: str, events: list[ClientEvent]) -> None:
+    def write_events(self, room_id: str, events: list[FilteredEvent]) -> None:
         """Write a batch of events for a room."""
         raise NotImplementedError()
 

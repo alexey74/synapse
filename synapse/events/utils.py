@@ -418,7 +418,7 @@ def format_event_for_client_v2_without_room_id(d: JsonDict) -> JsonDict:
 
 
 @attr.s(slots=True, frozen=True, auto_attribs=True)
-class ClientEvent:
+class FilteredEvent:
     """An event annotated with per-user data for client serialization.
 
     Produced by filter_and_transform_events_for_client. Carries the user's
@@ -430,13 +430,13 @@ class ClientEvent:
     membership: str | None
 
     @classmethod
-    def state(cls, event: "EventBase") -> "ClientEvent":
+    def state(cls, event: "EventBase") -> "FilteredEvent":
         """Wrap a state event with no per-user membership annotation.
 
         The event must be a state event (i.e. have a state_key).
         """
         assert event.is_state(), (
-            f"ClientEvent.state() called with non-state event {event.event_id}"
+            f"FilteredEvent.state() called with non-state event {event.event_id}"
         )
         return cls(event=event, membership=None)
 
@@ -631,7 +631,7 @@ class EventClientSerializer:
 
     async def serialize_event(
         self,
-        event: JsonDict | ClientEvent,
+        event: JsonDict | FilteredEvent,
         time_now: int,
         *,
         config: SerializeEventConfig = _DEFAULT_SERIALIZE_EVENT_CONFIG,
@@ -653,7 +653,7 @@ class EventClientSerializer:
             The serialized event
         """
         # To handle the case of presence events and the like
-        if not isinstance(event, ClientEvent):
+        if not isinstance(event, FilteredEvent):
             return event
 
         base_event = event.event
@@ -769,7 +769,7 @@ class EventClientSerializer:
             # `sender` of the edit; however MSC3925 proposes extending it to the whole
             # of the edit, which is what we do here.
             serialized_aggregations[RelationTypes.REPLACE] = await self.serialize_event(
-                ClientEvent(event=event_aggregations.replace, membership=None),
+                FilteredEvent(event=event_aggregations.replace, membership=None),
                 time_now,
                 config=config,
             )
@@ -779,7 +779,7 @@ class EventClientSerializer:
             thread = event_aggregations.thread
 
             serialized_latest_event = await self.serialize_event(
-                ClientEvent(event=thread.latest_event, membership=None),
+                FilteredEvent(event=thread.latest_event, membership=None),
                 time_now,
                 config=config,
                 bundle_aggregations=bundled_aggregations,
@@ -804,7 +804,7 @@ class EventClientSerializer:
     @trace
     async def serialize_events(
         self,
-        events: Collection[JsonDict | ClientEvent],
+        events: Collection[JsonDict | FilteredEvent],
         time_now: int,
         *,
         config: SerializeEventConfig = _DEFAULT_SERIALIZE_EVENT_CONFIG,
@@ -831,7 +831,7 @@ class EventClientSerializer:
         # Batch-fetch all redaction events in one go rather than one per event.
         redaction_ids: set[str] = set()
         for e in events:
-            base = e.event if isinstance(e, ClientEvent) else e
+            base = e.event if isinstance(e, FilteredEvent) else e
             if isinstance(base, EventBase):
                 redacted_by = base.internal_metadata.redacted_by
                 if redacted_by is not None:

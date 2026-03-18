@@ -62,7 +62,7 @@ from synapse.events.snapshot import (
     UnpersistedEventContextBase,
 )
 from synapse.events.utils import (
-    ClientEvent,
+    FilteredEvent,
     SerializeEventConfig,
     maybe_upsert_event_field,
 )
@@ -265,7 +265,7 @@ class MessageHandler:
                 room_state = room_state_events[membership_event_id]
 
         events = await self._event_serializer.serialize_events(
-            [ClientEvent.state(e) for e in room_state.values()],
+            [FilteredEvent.state(e) for e in room_state.values()],
             self.clock.time_msec(),
             config=SerializeEventConfig(requester=requester),
         )

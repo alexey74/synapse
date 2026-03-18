@@ -29,7 +29,7 @@ from unpaddedbase64 import decode_base64, encode_base64
 from synapse.api.constants import EventTypes, Membership
 from synapse.api.errors import NotFoundError, SynapseError
 from synapse.api.filtering import Filter
-from synapse.events.utils import ClientEvent, SerializeEventConfig
+from synapse.events.utils import FilteredEvent, SerializeEventConfig
 from synapse.types import JsonDict, Requester, StrCollection, StreamKeyType, UserID
 from synapse.types.state import StateFilter
 from synapse.visibility import filter_and_transform_events_for_client
@@ -47,7 +47,7 @@ class _SearchResult:
     # A mapping of event ID to the rank of that event.
     rank_map: dict[str, int]
     # A list of the resulting events.
-    allowed_events: list[ClientEvent]
+    allowed_events: list[FilteredEvent]
     # A map of room ID to results.
     room_groups: dict[str, JsonDict]
     # A set of event IDs to highlight.
@@ -359,7 +359,7 @@ class SearchHandler:
                 state_results[room_id] = list(state.values())
 
         aggregations = await self._relations_handler.get_bundled_aggregations(
-            # Generate an iterable of ClientEvent for all the events that will be
+            # Generate an iterable of FilteredEvent for all the events that will be
             # returned, including contextual events.
             itertools.chain(
                 # The events_before and events_after for each context.
@@ -416,7 +416,7 @@ class SearchHandler:
         if state_results:
             rooms_cat_res["state"] = {
                 room_id: await self._event_serializer.serialize_events(
-                    [ClientEvent.state(e) for e in state_events],
+                    [FilteredEvent.state(e) for e in state_events],
                     time_now,
                     config=serialize_options,
                 )
@@ -550,7 +550,7 @@ class SearchHandler:
 
         highlights = set()
 
-        room_events: list[ClientEvent] = []
+        room_events: list[FilteredEvent] = []
         i = 0
 
         pagination_token = batch_token
@@ -633,7 +633,7 @@ class SearchHandler:
     async def _calculate_event_contexts(
         self,
         user: UserID,
-        allowed_events: list[ClientEvent],
+        allowed_events: list[FilteredEvent],
         before_limit: int,
         after_limit: int,
         include_profile: bool,

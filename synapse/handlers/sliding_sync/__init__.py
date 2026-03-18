@@ -23,7 +23,7 @@ from typing_extensions import assert_never
 
 from synapse.api.constants import Direction, EventTypes, Membership
 from synapse.events import EventBase
-from synapse.events.utils import ClientEvent, strip_event
+from synapse.events.utils import FilteredEvent, strip_event
 from synapse.handlers.relations import BundledAggregations
 from synapse.handlers.sliding_sync.extensions import SlidingSyncExtensionHandler
 from synapse.handlers.sliding_sync.room_lists import (
@@ -679,7 +679,7 @@ class SlidingSyncHandler:
         # membership. Currently, we have to make all of these optional because
         # `invite`/`knock` rooms only have `stripped_state`. See
         # https://github.com/matrix-org/matrix-spec-proposals/pull/3575#discussion_r1653045932
-        timeline_events: list[ClientEvent] = []
+        timeline_events: list[FilteredEvent] = []
         bundled_aggregations: dict[str, BundledAggregations] | None = None
         limited: bool | None = None
         prev_batch_token: StreamToken | None = None
@@ -1485,7 +1485,7 @@ class SlidingSyncHandler:
         self,
         room_id: str,
         to_token: StreamToken,
-        timeline: list[ClientEvent],
+        timeline: list[FilteredEvent],
         check_outside_timeline: bool,
     ) -> int | None:
         """Get a bump stamp for the room, if we have a bump event and it has

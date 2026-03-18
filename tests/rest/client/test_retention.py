@@ -23,7 +23,7 @@ from unittest.mock import Mock
 from twisted.internet.testing import MemoryReactor
 
 from synapse.api.constants import EventTypes
-from synapse.events.utils import ClientEvent
+from synapse.events.utils import FilteredEvent
 from synapse.rest import admin
 from synapse.rest.client import login, room
 from synapse.server import HomeServer
@@ -258,7 +258,7 @@ class RetentionTestCase(unittest.HomeserverTestCase):
         time_now = self.clock.time_msec()
         serialized = self.get_success(
             self.serializer.serialize_event(
-                ClientEvent(event=event, membership=None), time_now
+                FilteredEvent(event=event, membership=None), time_now
             )
         )
 

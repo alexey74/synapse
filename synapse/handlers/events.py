@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from synapse.api.constants import EduTypes, EventTypes, Membership, PresenceState
 from synapse.api.errors import AuthError, SynapseError
-from synapse.events.utils import ClientEvent, SerializeEventConfig
+from synapse.events.utils import FilteredEvent, SerializeEventConfig
 from synapse.handlers.presence import format_user_presence_state
 from synapse.storage.databases.main.events_worker import EventRedactBehaviour
 from synapse.streams.config import PaginationConfig
@@ -101,7 +101,7 @@ class EventStreamHandler:
             # joined room, we need to send down presence for those users.
             to_add: list[JsonDict] = []
             for event in events:
-                if not isinstance(event, ClientEvent):
+                if not isinstance(event, FilteredEvent):
                     continue
                 if event.event.type == EventTypes.Member:
                     if event.event.membership != Membership.JOIN:
@@ -154,7 +154,7 @@ class EventHandler:
         room_id: str | None,
         event_id: str,
         show_redacted: bool = False,
-    ) -> ClientEvent | None:
+    ) -> FilteredEvent | None:
         """Retrieve a single specified event on behalf of a user.
         The event will be transformed in a user-specific and time-specific way,
         e.g. having unsigned metadata added or being erased depending on who is accessing.
