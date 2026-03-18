@@ -151,14 +151,14 @@ class FileExfiltrationWriter(ExfiltrationWriter):
         if list(os.listdir(self.base_directory)):
             raise Exception("Directory must be empty")
 
-    def write_events(self, room_id: str, events: list[FilteredEvent]) -> None:
+    def write_events(self, room_id: str, filtered_events: list[FilteredEvent]) -> None:
         room_directory = os.path.join(self.base_directory, "rooms", room_id)
         os.makedirs(room_directory, exist_ok=True)
         events_file = os.path.join(room_directory, "events")
 
         with open(events_file, "a") as f:
-            for event in events:
-                json.dump(event.event.get_pdu_json(), fp=f)
+            for filtered_event in filtered_events:
+                json.dump(filtered_event.event.get_pdu_json(), fp=f)
 
     def write_state(
         self, room_id: str, event_id: str, state: StateMap[EventBase]

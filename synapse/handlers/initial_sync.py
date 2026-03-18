@@ -225,9 +225,7 @@ class InitialSyncHandler:
                     )
                 ).addErrback(unwrapFirstError)
 
-                filtered_messages: list[
-                    FilteredEvent
-                ] = await filter_and_transform_events_for_client(
+                filtered_messages = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     user_id,
                     messages,
