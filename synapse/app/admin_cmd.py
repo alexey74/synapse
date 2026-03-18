@@ -176,7 +176,7 @@ class FileExfiltrationWriter(ExfiltrationWriter):
     def write_invite(
         self, room_id: str, event: EventBase, state: StateMap[EventBase]
     ) -> None:
-        self.write_events(room_id, [FilteredEvent(event=event, membership=None)])
+        self.write_events(room_id, [FilteredEvent.state(event)])
 
         # We write the invite state somewhere else as they aren't full events
         # and are only a subset of the state at the event.
@@ -192,7 +192,7 @@ class FileExfiltrationWriter(ExfiltrationWriter):
     def write_knock(
         self, room_id: str, event: EventBase, state: StateMap[EventBase]
     ) -> None:
-        self.write_events(room_id, [FilteredEvent(event=event, membership=None)])
+        self.write_events(room_id, [FilteredEvent.state(event)])
 
         # We write the knock state somewhere else as they aren't full events
         # and are only a subset of the state at the event.
