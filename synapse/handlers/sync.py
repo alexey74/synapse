@@ -43,6 +43,7 @@ from synapse.api.filtering import FilterCollection
 from synapse.api.presence import UserPresenceState
 from synapse.api.room_versions import KNOWN_ROOM_VERSIONS
 from synapse.events import EventBase
+from synapse.events.utils import ClientEvent
 from synapse.handlers.relations import BundledAggregations
 from synapse.logging import issue9533_logger
 from synapse.logging.context import current_context
@@ -123,7 +124,7 @@ class SyncConfig:
 @attr.s(slots=True, frozen=True, auto_attribs=True)
 class TimelineBatch:
     prev_batch: StreamToken
-    events: Sequence[EventBase]
+    events: Sequence[ClientEvent]
     limited: bool
     # A mapping of event ID to the bundled aggregations for the above events.
     # This is only calculated if limited is true.
@@ -148,7 +149,7 @@ class JoinedSyncResult:
     state: StateMap[EventBase]
     ephemeral: list[JsonDict]
     account_data: list[JsonDict]
-    sticky: list[EventBase]
+    sticky: list[ClientEvent]
     unread_notifications: JsonDict
     unread_thread_notifications: JsonDict
     summary: JsonDict | None
@@ -699,6 +700,7 @@ class SyncHandler:
 
             log_kv({"limited": limited})
 
+            client_recents: list[ClientEvent]
             if potential_recents:
                 recents = await sync_config.filter_collection.filter_room_timeline(
                     potential_recents
@@ -725,29 +727,30 @@ class SyncHandler:
                         )
                     )
 
-                recents = await filter_and_transform_events_for_client(
+                client_recents = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     sync_config.user.to_string(),
                     recents,
                     always_include_ids=current_state_ids,
                 )
-                log_kv({"recents_after_visibility_filtering": len(recents)})
+                log_kv({"recents_after_visibility_filtering": len(client_recents)})
             else:
-                recents = []
+                client_recents = []
 
             if not limited or block_all_timeline:
                 prev_batch_token = upto_token
-                if recents:
-                    assert recents[0].internal_metadata.stream_ordering
+                if client_recents:
+                    assert client_recents[0].event.internal_metadata.stream_ordering
                     room_key = RoomStreamToken(
-                        stream=recents[0].internal_metadata.stream_ordering - 1
+                        stream=client_recents[0].event.internal_metadata.stream_ordering
+                        - 1
                     )
                     prev_batch_token = upto_token.copy_and_replace(
                         StreamKeyType.ROOM, room_key
                     )
 
                 return TimelineBatch(
-                    events=recents, prev_batch=prev_batch_token, limited=False
+                    events=client_recents, prev_batch=prev_batch_token, limited=False
                 )
 
             filtering_factor = 2
@@ -764,7 +767,7 @@ class SyncHandler:
             elif since_token and not newly_joined_room:
                 since_key = since_token.room_key
 
-            while limited and len(recents) < timeline_limit and max_repeat:
+            while limited and len(client_recents) < timeline_limit and max_repeat:
                 # For initial `/sync`, we want to view a historical section of the
                 # timeline; to fetch events by `topological_ordering` (best
                 # representation of the room DAG as others were seeing it at the time).
@@ -835,26 +838,34 @@ class SyncHandler:
                         )
                     )
 
-                loaded_recents = await filter_and_transform_events_for_client(
+                loaded_recents_client: list[
+                    ClientEvent
+                ] = await filter_and_transform_events_for_client(
                     self._storage_controllers,
                     sync_config.user.to_string(),
                     loaded_recents,
                     always_include_ids=current_state_ids,
                 )
 
-                log_kv({"loaded_recents_after_client_filtering": len(loaded_recents)})
+                log_kv(
+                    {
+                        "loaded_recents_after_client_filtering": len(
+                            loaded_recents_client
+                        )
+                    }
+                )
 
-                loaded_recents.extend(recents)
-                recents = loaded_recents
+                loaded_recents_client.extend(client_recents)
+                client_recents = loaded_recents_client
 
                 max_repeat -= 1
 
-            if len(recents) > timeline_limit:
+            if len(client_recents) > timeline_limit:
                 limited = True
-                recents = recents[-timeline_limit:]
-                assert recents[0].internal_metadata.stream_ordering
+                client_recents = client_recents[-timeline_limit:]
+                assert client_recents[0].event.internal_metadata.stream_ordering
                 room_key = RoomStreamToken(
-                    stream=recents[0].internal_metadata.stream_ordering - 1
+                    stream=client_recents[0].event.internal_metadata.stream_ordering - 1
                 )
 
             prev_batch_token = upto_token.copy_and_replace(StreamKeyType.ROOM, room_key)
@@ -865,12 +876,12 @@ class SyncHandler:
         if limited or newly_joined_room:
             bundled_aggregations = (
                 await self._relations_handler.get_bundled_aggregations(
-                    recents, sync_config.user.to_string()
+                    client_recents, sync_config.user.to_string()
                 )
             )
 
         return TimelineBatch(
-            events=recents,
+            events=client_recents,
             prev_batch=prev_batch_token,
             # Also mark as limited if this is a new room or there has been a gap
             # (to force client to paginate the gap).
@@ -976,8 +987,8 @@ class SyncHandler:
 
         # ...or ones which are in the timeline...
         for ev in batch.events:
-            if ev.type == EventTypes.Member:
-                existing_members.add(ev.state_key)
+            if ev.event.type == EventTypes.Member:
+                existing_members.add(ev.event.state_key)
 
         # ...and then ensure any missing ones get included in state.
         missing_hero_event_ids = [
@@ -1084,32 +1095,34 @@ class SyncHandler:
                 first_event_by_sender_map = {}
                 for event in batch.events:
                     # Build the map from user IDs to the first timeline event they sent.
-                    if event.sender not in first_event_by_sender_map:
-                        first_event_by_sender_map[event.sender] = event
+                    if event.event.sender not in first_event_by_sender_map:
+                        first_event_by_sender_map[event.event.sender] = event.event
 
                     # When using `state_after`, there is no special treatment with
                     # regards to state also being in the `timeline`. Always fetch
                     # relevant membership regardless of whether the state event is in
                     # the `timeline`.
                     if sync_config.use_state_after:
-                        members_to_fetch.add(event.sender)
+                        members_to_fetch.add(event.event.sender)
                     # For `state`, the client is supposed to do a flawed re-construction
                     # of state over time by starting with the given `state` and layering
                     # on state from the `timeline` as you go (flawed because state
                     # resolution). In this case, we only need their membership in
                     # `state` when their membership isn't already in the `timeline`.
-                    elif (EventTypes.Member, event.sender) not in timeline_state:
-                        members_to_fetch.add(event.sender)
+                    elif (EventTypes.Member, event.event.sender) not in timeline_state:
+                        members_to_fetch.add(event.event.sender)
                     # FIXME: we also care about invite targets etc.
 
-                    if event.is_state():
-                        timeline_state[(event.type, event.state_key)] = event.event_id
+                    if event.event.is_state():
+                        timeline_state[(event.event.type, event.event.state_key)] = (
+                            event.event.event_id
+                        )
 
             else:
                 timeline_state = {
-                    (event.type, event.state_key): event.event_id
+                    (event.event.type, event.event.state_key): event.event.event_id
                     for event in batch.events
-                    if event.is_state()
+                    if event.event.is_state()
                 }
 
             # Now calculate the state to return in the sync response for the room.
@@ -1340,7 +1353,7 @@ class SyncHandler:
             # timeline, but that is good enough here.
             state_at_timeline_start = (
                 await self._state_storage_controller.get_state_ids_for_event(
-                    batch.events[0].event_id,
+                    batch.events[0].event.event_id,
                     state_filter=state_filter,
                     await_full_state=await_full_state,
                 )
@@ -1470,10 +1483,10 @@ class SyncHandler:
 
             prev_event_id = last_event_id_prev_batch
             for e in batch.events:
-                if e.prev_event_ids() != [prev_event_id]:
+                if e.event.prev_event_ids() != [prev_event_id]:
                     is_linear_timeline = False
                     break
-                prev_event_id = e.event_id
+                prev_event_id = e.event.event_id
 
         if is_linear_timeline and not batch.limited:
             state_ids: StateMap[str] = {}
@@ -1487,7 +1500,7 @@ class SyncHandler:
 
                     state_ids = (
                         await self._state_storage_controller.get_state_ids_for_event(
-                            batch.events[0].event_id,
+                            batch.events[0].event.event_id,
                             # we only want members!
                             state_filter=StateFilter.from_types(
                                 (EventTypes.Member, member)
@@ -1501,7 +1514,7 @@ class SyncHandler:
         if batch:
             state_at_timeline_start = (
                 await self._state_storage_controller.get_state_ids_for_event(
-                    batch.events[0].event_id,
+                    batch.events[0].event.event_id,
                     state_filter=state_filter,
                     await_full_state=await_full_state,
                 )
@@ -2854,7 +2867,7 @@ class SyncHandler:
                     #   if there are membership changes in the timeline, or
                     #   if membership has changed during a gappy sync, or
                     #   if this is an initial sync.
-                    any(ev.type == EventTypes.Member for ev in batch.events)
+                    any(ev.event.type == EventTypes.Member for ev in batch.events)
                     or (
                         # XXX: this may include false positives in the form of LL
                         # members which have snuck into state
@@ -2870,7 +2883,7 @@ class SyncHandler:
 
             if room_builder.rtype == "joined":
                 unread_notifications: dict[str, int] = {}
-                sticky_events: list[EventBase] = []
+                sticky_events: list[ClientEvent] = []
                 if sticky_event_ids:
                     # As per MSC4354:
                     # Remove sticky events that are already in the timeline, else we will needlessly duplicate
@@ -2880,7 +2893,7 @@ class SyncHandler:
                     # This is particularly important given the risk of sticky events spam since
                     # anyone can send sticky events, so halving the bandwidth on average for each sticky
                     # event is helpful.
-                    timeline_event_id_set = {ev.event_id for ev in batch.events}
+                    timeline_event_id_set = {ev.event.event_id for ev in batch.events}
                     # Must preserve sticky event stream order
                     sticky_event_ids = [
                         e for e in sticky_event_ids if e not in timeline_event_id_set
@@ -3144,7 +3157,8 @@ class SyncResultBuilder:
         if self.since_token:
             for joined_sync in self.joined:
                 it = itertools.chain(
-                    joined_sync.state.values(), joined_sync.timeline.events
+                    joined_sync.state.values(),
+                    (e.event for e in joined_sync.timeline.events),
                 )
                 for event in it:
                     if event.type == EventTypes.Member:
