@@ -416,7 +416,7 @@ class SearchHandler:
         if state_results:
             rooms_cat_res["state"] = {
                 room_id: await self._event_serializer.serialize_events(
-                    [ClientEvent(event=e, membership=None) for e in state_events],
+                    [ClientEvent.state(e) for e in state_events],
                     time_now,
                     config=serialize_options,
                 )

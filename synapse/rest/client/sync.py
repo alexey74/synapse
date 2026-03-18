@@ -600,7 +600,7 @@ class SyncRestServlet(RestServlet):
                 )
 
         serialized_state = await self._event_serializer.serialize_events(
-            [ClientEvent(event=e, membership=None) for e in state_events],
+            [ClientEvent.state(e) for e in state_events],
             time_now,
             config=serialize_options,
         )
@@ -990,10 +990,7 @@ class SlidingSyncRestServlet(RestServlet):
             ):
                 serialized_required_state = (
                     await self.event_serializer.serialize_events(
-                        [
-                            ClientEvent(event=e, membership=None)
-                            for e in room_result.required_state
-                        ],
+                        [ClientEvent.state(e) for e in room_result.required_state],
                         time_now,
                         config=serialize_options,
                     )

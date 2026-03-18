@@ -531,7 +531,7 @@ class RoomStateRestServlet(RestServlet):
         events = await self.store.get_events(event_ids.values())
         now = self.clock.time_msec()
         room_state = await self._event_serializer.serialize_events(
-            [ClientEvent(event=e, membership=None) for e in events.values()], now
+            [ClientEvent.state(e) for e in events.values()], now
         )
         ret = {"state": room_state}
 
@@ -900,7 +900,7 @@ class RoomEventContextServlet(RestServlet):
                 bundle_aggregations=event_context.aggregations,
             ),
             "state": await self._event_serializer.serialize_events(
-                [ClientEvent(event=e, membership=None) for e in event_context.state],
+                [ClientEvent.state(e) for e in event_context.state],
                 time_now,
             ),
             "start": event_context.start,

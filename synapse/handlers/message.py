@@ -265,7 +265,7 @@ class MessageHandler:
                 room_state = room_state_events[membership_event_id]
 
         events = await self._event_serializer.serialize_events(
-            [ClientEvent(event=e, membership=None) for e in room_state.values()],
+            [ClientEvent.state(e) for e in room_state.values()],
             self.clock.time_msec(),
             config=SerializeEventConfig(requester=requester),
         )

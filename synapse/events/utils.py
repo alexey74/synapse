@@ -429,6 +429,17 @@ class ClientEvent:
     event: "EventBase"
     membership: str | None
 
+    @classmethod
+    def state(cls, event: "EventBase") -> "ClientEvent":
+        """Wrap a state event with no per-user membership annotation.
+
+        The event must be a state event (i.e. have a state_key).
+        """
+        assert event.is_state(), (
+            f"ClientEvent.state() called with non-state event {event.event_id}"
+        )
+        return cls(event=event, membership=None)
+
 
 @attr.s(slots=True, frozen=True, auto_attribs=True)
 class SerializeEventConfig:

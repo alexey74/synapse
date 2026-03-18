@@ -252,10 +252,7 @@ class InitialSyncHandler:
                 }
 
                 d["state"] = await self._event_serializer.serialize_events(
-                    [
-                        ClientEvent(event=e, membership=None)
-                        for e in current_state.values()
-                    ],
+                    [ClientEvent.state(e) for e in current_state.values()],
                     time_now=time_now,
                     config=serializer_options,
                 )
@@ -418,10 +415,7 @@ class InitialSyncHandler:
             "state": (
                 # Don't bundle aggregations as this is a deprecated API.
                 await self._event_serializer.serialize_events(
-                    [
-                        ClientEvent(event=e, membership=None)
-                        for e in room_state.values()
-                    ],
+                    [ClientEvent.state(e) for e in room_state.values()],
                     time_now,
                     config=serialize_options,
                 )
@@ -447,7 +441,7 @@ class InitialSyncHandler:
         serialize_options = SerializeEventConfig(requester=requester)
         # Don't bundle aggregations as this is a deprecated API.
         state = await self._event_serializer.serialize_events(
-            [ClientEvent(event=e, membership=None) for e in current_state.values()],
+            [ClientEvent.state(e) for e in current_state.values()],
             time_now,
             config=serialize_options,
         )
