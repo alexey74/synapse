@@ -754,7 +754,7 @@ class RoomCreationHandler:
                             "state_key": ban_event.state_key,
                             "room_id": new_room_id,
                             "sender": requester.user.to_string(),
-                            "content": ban_event.content,
+                            "content": dict(ban_event.content),
                         }
                         for ban_event in batched_ban_events
                     ],

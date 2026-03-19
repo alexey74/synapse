@@ -20,8 +20,6 @@ from typing import (
 
 from immutabledict import immutabledict
 
-from synapse.synapse_rust.events import JsonObject
-
 
 def _reject_invalid_json(val: Any) -> None:
     """Do not allow Infinity, -Infinity, or NaN values in JSON."""

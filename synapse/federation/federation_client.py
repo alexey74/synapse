@@ -21,7 +21,6 @@
 #
 
 
-import copy
 import itertools
 import logging
 from typing import (
@@ -633,7 +632,7 @@ class FederationClient(FederationBase):
                 except Exception as e:
                     pdu_attempts[destination] = now
 
-                    logger.info(
+                    logger.exception(
                         "get_pdu(event_id=%s): Failed to get PDU from %s because %s",
                         event_id,
                         destination,

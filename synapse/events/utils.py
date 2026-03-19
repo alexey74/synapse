@@ -660,7 +660,7 @@ class EventClientSerializer:
         """
         # To handle the case of presence events and the like
         if not isinstance(event, FilteredEvent):
-            raise TypeError("Expected EventBase or Event, got %r" % (event,))
+            return event
 
         base_event = event.event
         membership = event.membership

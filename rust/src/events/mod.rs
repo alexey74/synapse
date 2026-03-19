@@ -833,14 +833,46 @@ impl Event {
 
     #[getter]
     fn redacts<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        // TODO: Handle redacts moving
-        let other_fields = match &self.inner {
-            EventFormatEnum::V3(format) => &format.common_fields.other_fields,
-            // ...
-        };
+        let value = match self.room_version {
+            RoomVersion::V1
+            | RoomVersion::V2
+            | RoomVersion::V3
+            | RoomVersion::V4
+            | RoomVersion::V5
+            | RoomVersion::V6
+            | RoomVersion::V7
+            | RoomVersion::V8
+            | RoomVersion::V9
+            | RoomVersion::V10 => {
+                let other_fields = match &self.inner {
+                    EventFormatEnum::V3(format) => &format.common_fields.other_fields,
+                    // ...
+                };
 
-        let Some(value) = other_fields.get("redacts") else {
-            return Ok(None);
+                let Some(value) = other_fields.get("redacts") else {
+                    return Ok(None);
+                };
+
+                value
+            }
+            RoomVersion::V11
+            | RoomVersion::V12
+            | RoomVersion::OrgMatrixMsc1767_10
+            | RoomVersion::OrgMatrixMsc3757_10
+            | RoomVersion::OrgMatrixMsc3757_11
+            | RoomVersion::OrgMatrixHydra11 => {
+                let content = match &self.inner {
+                    EventFormatEnum::V3(format) => &format.common_fields.content,
+                    // ...
+                };
+
+                let Some(value) = content.object.get("redacts") else {
+                    return Ok(None);
+                };
+
+                value
+            }
+            RoomVersion::Custom(_) => todo!(),
         };
 
         Ok(Some(pythonize(py, value)?))
@@ -892,6 +924,12 @@ impl Event {
         let dict = self.get_dict(py)?;
         let dict = dict.cast::<PyDict>()?;
         Ok(dict.items())
+    }
+
+    fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let dict = self.get_dict(py)?;
+        let dict = dict.cast::<PyDict>()?;
+        Ok(dict.keys())
     }
 }
 
